@@ -207,6 +207,38 @@ td small,
   gap: 24px;
 }
 
+.jobs-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.fullscreen-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #cbd8d2;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #fff;
+  color: #155f48;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fullscreen-toggle:hover {
+  border-color: #57957d;
+  background: #edf6f2;
+}
+
+.fullscreen-toggle span {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .controls-toggle {
   display: inline-flex;
   align-items: center;
@@ -235,6 +267,21 @@ td small,
 
 .jobs-toolbar.controls-open .controls-toggle b {
   transform: rotate(180deg);
+}
+
+.jobs-workspace:fullscreen {
+  min-width: 100vw;
+  min-height: 100vh;
+  padding: 22px;
+  overflow: auto;
+  background: #f4f7f5;
+}
+
+.jobs-workspace:fullscreen .jobs-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  box-shadow: 0 7px 24px rgba(20,35,30,0.1);
 }
 
 .jobs-toolbar > div:first-child p,
@@ -1447,8 +1494,18 @@ tr.deadline-overdue .status-pill.green {
     gap: 12px;
   }
 
-  .controls-toggle {
+  .jobs-toolbar-actions {
     width: 100%;
+  }
+
+  .fullscreen-toggle,
+  .controls-toggle {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .controls-toggle {
+    width: auto;
   }
 
   .job-controls {
