@@ -12,10 +12,10 @@ type Notice = { kind: "success" | "error" | "duplicate"; title: string; detail: 
 type ReportType = "daily" | "snapshot" | "workload" | "risks";
 
 const nav: { id: Page; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
-  { id: "scanner", label: "Scanner Station", icon: "⌁" },
   { id: "create", label: "Create Job", icon: "+" },
   { id: "jobs", label: "Active Jobs", icon: "≡" },
+  { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
+  { id: "scanner", label: "Scanner Station", icon: "⌁" },
   { id: "history", label: "Job History", icon: "↺" },
   { id: "admin", label: "Administration", icon: "⚙" },
 ];
@@ -174,7 +174,7 @@ function CalendarDatePicker({ value, onChange, min, name }: { value: string; onC
 }
 
 export default function Home() {
-  const [page, setPage] = useState<Page>("dashboard");
+  const [page, setPage] = useState<Page>("jobs");
   const [state, setState] = useState(seedState);
   const [notice, setNotice] = useState<Notice>(null);
   const [manualScan, setManualScan] = useState("PRINT|590036");
@@ -186,6 +186,7 @@ export default function Home() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "location" | "customer">("none");
   const [sortBy, setSortBy] = useState<"recent" | "due" | "priority" | "time" | "job" | "customer">("recent");
+  const [jobControlsOpen, setJobControlsOpen] = useState(false);
   const [pendingStatuses, setPendingStatuses] = useState<Record<string,{statusId:string;expiresAt:number}>>({});
   const [statusPrint, setStatusPrint] = useState<StatusDefinition[] | null>(null);
   const [managementReport, setManagementReport] = useState<ReportType | null>(null);
@@ -423,7 +424,7 @@ export default function Home() {
         <div className="panel label-preview"><p className="eyebrow">LABEL PREVIEW</p><h2>Job barcode</h2><p>The barcode updates automatically as you enter the unique PACE job number.</p><div className="paper-label"><small>PRODUCTION JOB</small><strong>{labelJobNumber || "Enter job number"}</strong>{labelJobNumber ? <Code128 value={labelJobNumber}/> : <div className="barcode-placeholder">Barcode preview</div>}<p>Attach this label to the job jacket.</p></div><button className="secondary" disabled={!state.jobs.some(job=>job.jobNumber===labelJobNumber)} onClick={openCreatedJobLabel}>Print Barcode Label</button>{labelJobNumber&&!state.jobs.some(job=>job.jobNumber===labelJobNumber)&&<small className="save-before-print">Create the job first to enable printing.</small>}</div>
       </section>}
 
-      {page === "jobs" && <section className="jobs-workspace"><div className="panel jobs-toolbar"><div className="jobs-toolbar-heading"><h2>Active jobs</h2><p>{filteredJobs.length} open jobs · click Review to inspect or override any record</p></div><div className="job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div></div>{jobGroups.map(group=><section className="panel job-group" key={group.key}><div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div></div><JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onOpen={setSelectedJob}/></section>)}</section>}
+      {page === "jobs" && <section className="jobs-workspace"><div className={`panel jobs-toolbar ${jobControlsOpen?"controls-open":""}`}><div className="jobs-toolbar-summary"><div className="jobs-toolbar-heading"><h2>Active jobs</h2><p>{filteredJobs.length} open jobs · click Review to inspect or override any record</p></div><button type="button" className="controls-toggle" aria-expanded={jobControlsOpen} aria-controls="active-job-controls" onClick={()=>setJobControlsOpen(open=>!open)}><span>{jobControlsOpen?"Hide":"Search, organize & sort"}</span><b aria-hidden="true">⌄</b></button></div>{jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}</div>{jobGroups.map(group=><section className="panel job-group" key={group.key}><div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div></div><JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onOpen={setSelectedJob}/></section>)}</section>}
 
       {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>Every scan is timestamped and retained.</p></div><span className="count-pill">{state.scans.length} events</span></div><div className="history-list">{state.scans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>}</div>})}</div></section>}
 

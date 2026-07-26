@@ -197,10 +197,44 @@ td small,
 }
 
 .jobs-toolbar {
-  display: grid;
-  grid-template-columns: minmax(340px, 0.8fr) minmax(650px, 1.45fr);
-  align-items: end;
-  gap: 28px;
+  padding: 16px 19px;
+}
+
+.jobs-toolbar-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.controls-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 190px;
+  border: 1px solid #cbd8d2;
+  border-radius: 8px;
+  padding: 10px 13px;
+  background: #f8faf9;
+  color: #244138;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.controls-toggle:hover {
+  border-color: #79a592;
+  background: #f0f6f3;
+}
+
+.controls-toggle b {
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+
+.jobs-toolbar.controls-open .controls-toggle b {
+  transform: rotate(180deg);
 }
 
 .jobs-toolbar > div:first-child p,
@@ -216,6 +250,9 @@ td small,
   align-items: flex-end;
   gap: 14px;
   width: 100%;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e7eeea;
 }
 
 .job-controls .search {
@@ -265,11 +302,6 @@ td small,
 }
 
 @media (min-width: 761px) and (max-width: 1350px) {
-  .jobs-toolbar {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-
   .job-controls {
     grid-template-columns: minmax(230px, 1.1fr) minmax(180px, 0.9fr) minmax(220px, 1fr);
   }
@@ -1403,18 +1435,23 @@ tr.deadline-overdue .status-pill.green {
 }
 
 @media (max-width: 760px) {
-  .jobs-toolbar,
   .job-controls,
   .editor-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .job-controls {
-    grid-template-columns: 1fr;
+  .jobs-toolbar-summary {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  .jobs-toolbar {
+  .controls-toggle {
+    width: 100%;
+  }
+
+  .job-controls {
     grid-template-columns: 1fr;
   }
 
