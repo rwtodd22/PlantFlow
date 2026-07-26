@@ -379,6 +379,27 @@ export default function Home() {
     setNotice({ kind: "success", title: `Job ${saved.jobNumber} updated`, detail: "Manual changes were saved and the job record was refreshed." });
   };
 
+  const updateJobFromTable = (job: Job, change: { currentDepartmentId?: string; status?: string }) => {
+    const nextDepartmentId = change.currentDepartmentId ?? job.currentDepartmentId;
+    const nextStatus = change.status ?? job.status;
+    if (nextDepartmentId === job.currentDepartmentId && nextStatus === job.status) return;
+    const timestamp = new Date().toISOString();
+    const department = departments.find(item => item.id === nextDepartmentId);
+    const updated = { ...job, currentDepartmentId: nextDepartmentId, status: nextStatus, updatedAt: timestamp };
+    const scan: ScanEvent = {
+      id: crypto.randomUUID(),
+      jobNumber: job.jobNumber,
+      departmentId: nextDepartmentId,
+      departmentName: department?.name || "Not started",
+      previousDepartmentId: job.currentDepartmentId,
+      timestamp,
+      type: "Manual",
+      ...(change.status !== undefined ? { statusName: nextStatus } : {}),
+    };
+    persist({ ...state, jobs: state.jobs.map(item => item.id === job.id ? updated : item), scans: [scan, ...state.scans] });
+    setNotice({ kind: "success", title: `Job ${job.jobNumber} updated`, detail: change.status !== undefined ? `Status changed to ${nextStatus}.` : `Location changed to ${department?.name || "Not started"}.` });
+  };
+
   const createJob = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -444,7 +465,7 @@ export default function Home() {
         {jobGroups.map((group,index)=><section className={`panel job-group ${index===0&&jobControlsOpen?"controls-open":""}`} key={group.key}>
           <div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div>{index===0&&<div className="jobs-toolbar-actions"><button type="button" className="fullscreen-toggle" onClick={toggleActiveJobsFullscreen}><span aria-hidden="true">{jobsFullscreen?"↙":"⛶"}</span>{jobsFullscreen?"Exit full screen":"Full screen"}</button><button type="button" className="controls-toggle" aria-expanded={jobControlsOpen} aria-controls="active-job-controls" onClick={()=>setJobControlsOpen(open=>!open)}><span>{jobControlsOpen?"Hide controls":"Search, organize & sort"}</span><b aria-hidden="true">⌄</b></button></div>}</div>
           {index===0&&jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}
-          <JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onOpen={setSelectedJob}/>
+          <JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} departments={departments} statuses={statuses} onQuickChange={updateJobFromTable} onPrint={setPrintJob} onOpen={setSelectedJob}/>
         </section>)}
       </section>}
 
@@ -461,7 +482,7 @@ export default function Home() {
 
 function Metric({label,value,sub,tone="blue"}:{label:string;value:number;sub:string;tone?:string}) { return <div className={`metric ${tone}`}><div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div><span>↗</span></div> }
 
-function JobTable({jobs,deptName,detailed=false,highlightDeadlines=false,onPrint,onOpen}:{jobs:Job[];deptName:(id:string)=>string;detailed?:boolean;highlightDeadlines?:boolean;onPrint?:(job:Job)=>void;onOpen?:(job:Job)=>void}) { return <div className="table-scroll"><table><thead><tr><th>Job</th><th>Customer / Description</th><th>Location</th><th>Status</th><th>Due</th>{detailed&&<th>Priority</th>}<th>Time here</th>{(onPrint||onOpen)&&<th>Actions</th>}</tr></thead><tbody>{jobs.map(job=><tr key={job.id} className={`${onOpen?"reviewable-row ":""}${deadlineTone(job.dueDate,highlightDeadlines)}`.trim()} onDoubleClick={()=>onOpen?.(job)}><td><b className="job-num">{job.jobNumber}</b></td><td><b>{job.customer}</b><small>{job.description}</small></td><td><span className="department-pill">{deptName(job.currentDepartmentId)}</span></td><td><span className={`status-pill ${statusTone[job.status]||"slate"}`}>{job.status}</span></td><td className={job.dueDate < localDateValue()?"overdue":""}>{formatDate(job.dueDate)}</td>{detailed&&<td><b className={`priority ${job.priority.toLowerCase()}`}>{job.priority}</b></td>}<td>{timeAgo(job.updatedAt)}</td>{(onPrint||onOpen)&&<td><div className="row-actions">{onOpen&&<button className="review-action" onClick={()=>onOpen(job)}>Review</button>}{onPrint&&<button className="barcode-action" onClick={()=>onPrint(job)}>▥ Reprint</button>}</div></td>}</tr>)}</tbody></table>{!jobs.length&&<div className="empty">No matching active jobs.</div>}</div> }
+function JobTable({jobs,deptName,detailed=false,highlightDeadlines=false,departments,statuses,onQuickChange,onPrint,onOpen}:{jobs:Job[];deptName:(id:string)=>string;detailed?:boolean;highlightDeadlines?:boolean;departments?:Department[];statuses?:StatusDefinition[];onQuickChange?:(job:Job,change:{currentDepartmentId?:string;status?:string})=>void;onPrint?:(job:Job)=>void;onOpen?:(job:Job)=>void}) { return <div className="table-scroll"><table><thead><tr><th>Job</th><th>Customer / Description</th><th>Location</th><th>Status</th><th>Due</th>{detailed&&<th>Priority</th>}<th>Time here</th>{(onPrint||onOpen)&&<th>Actions</th>}</tr></thead><tbody>{jobs.map(job=><tr key={job.id} className={`${onOpen?"reviewable-row ":""}${deadlineTone(job.dueDate,highlightDeadlines)}`.trim()} onDoubleClick={()=>onOpen?.(job)}><td><b className="job-num">{job.jobNumber}</b></td><td><b>{job.customer}</b><small>{job.description}</small></td><td>{onQuickChange&&departments?<select className="inline-job-select inline-location" aria-label={`Location for job ${job.jobNumber}`} value={job.currentDepartmentId} onClick={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>onQuickChange(job,{currentDepartmentId:event.target.value})}><option value="">Not started</option>{departments.filter(item=>item.enabled||item.id===job.currentDepartmentId).sort((a,b)=>a.order-b.order).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>:<span className="department-pill">{deptName(job.currentDepartmentId)}</span>}</td><td>{onQuickChange&&statuses?<select className={`inline-job-select inline-status ${statusTone[job.status]||"slate"}`} aria-label={`Status for job ${job.jobNumber}`} value={job.status} onClick={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>onQuickChange(job,{status:event.target.value})}>{statuses.filter(item=>item.enabled||item.name===job.status).sort((a,b)=>a.order-b.order).map(item=><option key={item.id} value={item.name}>{item.name}</option>)}</select>:<span className={`status-pill ${statusTone[job.status]||"slate"}`}>{job.status}</span>}</td><td className={job.dueDate < localDateValue()?"overdue":""}>{formatDate(job.dueDate)}</td>{detailed&&<td><b className={`priority ${job.priority.toLowerCase()}`}>{job.priority}</b></td>}<td>{timeAgo(job.updatedAt)}</td>{(onPrint||onOpen)&&<td className="actions-cell"><div className="row-actions">{onOpen&&<button className="review-action" onClick={()=>onOpen(job)}>Review</button>}{onPrint&&<button className="barcode-action" onClick={()=>onPrint(job)}>▥ Reprint</button>}</div></td>}</tr>)}</tbody></table>{!jobs.length&&<div className="empty">No matching active jobs.</div>}</div> }
 
 function ScanList({scans,detailed=false}:{scans:ScanEvent[];detailed?:boolean}) { return <div className="scan-list">{scans.map(scan=><div className="scan-item" key={scan.id}><span className="scan-check">✓</span><div><b>Job {scan.jobNumber}</b><small>{scan.statusName?`Changed to ${scan.statusName} in ${scan.departmentName}`:`Moved to ${scan.departmentName}`}{detailed?` · ${scan.type}`:""}</small></div><time>{timeAgo(scan.timestamp)}</time></div>)}</div> }
 

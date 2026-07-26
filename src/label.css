@@ -351,6 +351,55 @@ td small,
   gap: 6px;
 }
 
+.inline-job-select {
+  width: 100%;
+  min-width: 118px;
+  max-width: 180px;
+  border: 1px solid #d5dfda;
+  border-radius: 7px;
+  padding: 6px 27px 6px 8px;
+  background-color: #f1f5f3;
+  color: #173229;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.inline-status {
+  min-width: 145px;
+  background-color: #eef3f1;
+}
+
+.inline-status.blue { background-color: #e7f1f5; color: #285f77; }
+.inline-status.amber { background-color: #fff2dc; color: #955d19; }
+.inline-status.orange { background-color: #fff0df; color: #9c571b; }
+.inline-status.red { background-color: #fcebea; color: #9f332e; }
+.inline-status.green { background-color: #e6f3eb; color: #196d4e; }
+
+.inline-job-select:focus {
+  outline: 0;
+  border-color: #57957d;
+  box-shadow: 0 0 0 3px rgba(21,95,72,0.12);
+}
+
+.jobs-workspace:fullscreen th:last-child,
+.jobs-workspace:fullscreen td.actions-cell {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #fff;
+  box-shadow: -8px 0 12px rgba(20,35,30,0.05);
+}
+
+.jobs-workspace:fullscreen th:last-child {
+  z-index: 3;
+}
+
+.jobs-workspace:fullscreen tr.deadline-soon td.actions-cell { background: #fffbf1; }
+.jobs-workspace:fullscreen tr.deadline-overdue td.actions-cell { background: #fff0ef; }
+.jobs-workspace:fullscreen .reviewable-row:hover td.actions-cell { background: #f6faf8; }
+
 .review-action {
   border: 1px solid #155f48;
   border-radius: 6px;
