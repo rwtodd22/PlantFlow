@@ -196,18 +196,6 @@ td small,
   gap: 16px;
 }
 
-.jobs-toolbar {
-  padding: 8px 10px;
-  border-color: #e5ebe8;
-  box-shadow: 0 1px 7px rgba(20,35,30,0.035);
-}
-
-.jobs-toolbar-summary {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
 .jobs-toolbar-actions {
   display: flex;
   align-items: center;
@@ -266,7 +254,7 @@ td small,
   transition: transform 0.18s ease;
 }
 
-.jobs-toolbar.controls-open .controls-toggle b {
+.job-group.controls-open .controls-toggle b {
   transform: rotate(180deg);
 }
 
@@ -278,14 +266,6 @@ td small,
   background: #f4f7f5;
 }
 
-.jobs-workspace:fullscreen .jobs-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  box-shadow: 0 7px 24px rgba(20,35,30,0.1);
-}
-
-.jobs-toolbar > div:first-child p,
 .group-heading p {
   margin-top: 4px;
   color: #6e7d77;
@@ -1489,14 +1469,9 @@ tr.deadline-overdue .status-pill.green {
     flex-direction: column;
   }
 
-  .jobs-toolbar-summary {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
-  }
-
   .jobs-toolbar-actions {
     width: 100%;
+    justify-content: flex-end;
   }
 
   .fullscreen-toggle,
