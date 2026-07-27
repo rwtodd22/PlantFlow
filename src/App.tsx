@@ -481,7 +481,8 @@ export default function Home() {
 
   const createJob = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const jobNumber = String(form.get("jobNumber") || "").trim();
     if (state.jobs.some(j => j.jobNumber === jobNumber)) { setNotice({ kind: "error", title: "Duplicate job number", detail: `${jobNumber} already exists.` }); return; }
     const now = new Date().toISOString();
@@ -491,7 +492,7 @@ export default function Home() {
     setLabelJobNumber("");
     setJobNumberInput("");
     setJobDueDate(localDateValue(3));
-    event.currentTarget.reset();
+    formElement.reset();
     setNotice({ kind: "success", title: `Job ${jobNumber} created`, detail: "The form is ready for the next job. Its barcode can be printed from Active Jobs or Job History." });
   };
 
@@ -509,7 +510,7 @@ export default function Home() {
       <div className="system-card"><span className="live-dot"/><div><strong>Scanner listener active</strong><small>Waiting for HID input</small></div></div>
     </aside>
     <main>
-      <header><div><p className="eyebrow">SHOP FLOOR CONTROL</p><h1>{nav.find(n=>n.id===page)?.label}</h1></div><div className="header-actions"><span className="date-chip">{new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</span><button className="primary small" onClick={()=>setPage("create")}>+ New job</button></div></header>
+      <header><div><p className="eyebrow">SHOP FLOOR CONTROL</p><h1>{nav.find(n=>n.id===page)?.label}</h1></div><div className="header-actions"><span className="date-chip">{new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</span><button type="button" className="primary small" onClick={()=>setPage("create")}>+ New job</button></div></header>
       {notice && <div className={`notice ${notice.kind}`}><span>{notice.kind==="success"?"✓":notice.kind==="duplicate"?"↺":"!"}</span><div><strong>{notice.title}</strong><small>{notice.detail}</small></div><button onClick={()=>setNotice(null)}>×</button></div>}
 
       {page === "dashboard" && <section>
@@ -529,7 +530,7 @@ export default function Home() {
         <form className="panel job-form" onSubmit={createJob}><div className="panel-head"><div><h2>Create a production job</h2><p>Enter the job details and choose its expected route.</p></div></div>
           <div className="form-grid"><label><span>PACE job number *</span><input name="jobNumber" required placeholder="e.g. 590042" value={jobNumberInput} onChange={event=>{const value=event.target.value.toUpperCase();setJobNumberInput(value);setLabelJobNumber(value)}} /></label><label><span>Customer *</span><input name="customer" required placeholder="Customer name" /></label><label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or description" /></label><label><span>Production due date *</span><CalendarDatePicker name="dueDate" value={jobDueDate} min={localDateValue()} onChange={setJobDueDate}/></label><label><span>Priority</span><select name="priority" defaultValue="Standard"><option>Standard</option><option>Rush</option><option>Critical</option></select></label><label className="wide"><span>Production notes</span><textarea name="notes" rows={3} placeholder="Materials, finishing notes, or special handling" /></label></div>
           <fieldset><legend>Expected production route</legend><p>Select the departments this job is expected to visit. This list is editable later.</p><div className="route-options">{departments.filter(d=>d.enabled).map(d=><label key={d.id}><input type="checkbox" name={`route-${d.id}`} defaultChecked/><span className="route-num">{d.order}</span><div><b>{d.name}</b><small>{d.prefix}|</small></div></label>)}</div></fieldset>
-          <div className="form-actions"><button type="reset" className="secondary" onClick={()=>{setJobNumberInput("");setLabelJobNumber("");setJobDueDate(localDateValue(3))}}>Clear form</button><button className="primary">Create job</button></div>
+          <div className="form-actions"><button type="reset" className="secondary" onClick={()=>{setJobNumberInput("");setLabelJobNumber("");setJobDueDate(localDateValue(3))}}>Clear form</button><button type="submit" className="primary">Create job</button></div>
         </form>
         <div className="panel label-preview"><p className="eyebrow">LABEL PREVIEW</p><h2>Job barcode</h2><p>The barcode updates automatically as you enter the unique PACE job number.</p><div className="paper-label"><small>PRODUCTION JOB</small><strong>{labelJobNumber || "Enter job number"}</strong>{labelJobNumber ? <Code128 value={labelJobNumber}/> : <div className="barcode-placeholder">Barcode preview</div>}<p>Attach this label to the job jacket.</p></div><button className="secondary" disabled={!state.jobs.some(job=>job.jobNumber===labelJobNumber)} onClick={openCreatedJobLabel}>Print Barcode Label</button>{labelJobNumber&&!state.jobs.some(job=>job.jobNumber===labelJobNumber)&&<small className="save-before-print">Create the job first to enable printing.</small>}</div>
       </section>}

@@ -629,6 +629,18 @@ td small,
   font-size: 10px;
 }
 
+.job-form fieldset {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.job-form fieldset legend {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 0;
+  background: #fff;
+}
+
 @media (max-width: 760px) {
   .split-part-card {
     grid-template-columns: 1fr;
