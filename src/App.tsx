@@ -208,7 +208,7 @@ function OverlayPortal({children,target}:{children:ReactNode;target:HTMLElement|
 }
 
 export default function Home() {
-  const [page, setPage] = useState<Page>("jobs");
+  const [page, setPage] = useState<Page>("dashboard");
   const [state, setState] = useState(seedState);
   const [notice, setNotice] = useState<Notice>(null);
   const [jobNumberInput, setJobNumberInput] = useState("");
