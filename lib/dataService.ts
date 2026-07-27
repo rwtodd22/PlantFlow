@@ -1,7 +1,8 @@
 export type Department = { id:string; name:string; prefix:string; enabled:boolean; order:number };
 export type StatusDefinition = { id:string; name:string; code:string; enabled:boolean; order:number; color:string; closesJob:boolean };
-export type Job = { id:string; jobNumber:string; customer:string; description:string; dueDate:string; priority:"Standard"|"Rush"|"Critical"; status:string; currentDepartmentId:string; route:string[]; notes:string; createdAt:string; updatedAt:string };
-export type ScanEvent = { id:string; jobNumber:string; departmentId:string; departmentName:string; previousDepartmentId:string; timestamp:string; type:"Normal"|"Route exception"|"Manual"|"Status command"; statusName?:string };
+export type JobPart = { id:string; code:string; name:string; description:string; quantity:string; currentDepartmentId:string; status:string; updatedAt:string };
+export type Job = { id:string; jobNumber:string; customer:string; description:string; dueDate:string; priority:"Standard"|"Rush"|"Critical"; status:string; currentDepartmentId:string; route:string[]; notes:string; createdAt:string; updatedAt:string; parts?:JobPart[] };
+export type ScanEvent = { id:string; jobNumber:string; departmentId:string; departmentName:string; previousDepartmentId:string; timestamp:string; type:"Normal"|"Route exception"|"Manual"|"Status command"; statusName?:string; partId?:string; partCode?:string; partName?:string };
 export type AppSettings = { deadlineHighlighting:boolean };
 export type AppState = { departments:Department[]; statuses:StatusDefinition[]; settings:AppSettings; jobs:Job[]; scans:ScanEvent[] };
 

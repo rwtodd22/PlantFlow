@@ -451,6 +451,198 @@ td small,
   box-shadow: 0 0 0 3px rgba(76, 150, 121, 0.2), inset 0 0 0 1px #4c9679;
 }
 
+.job-number-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.parts-toggle {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid #cad8d2;
+  border-radius: 6px;
+  padding: 0;
+  background: #f6faf8;
+  color: #155f48;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.parts-toggle:hover {
+  border-color: #76a38f;
+  background: #eaf4ef;
+}
+
+.parts-count {
+  margin: 0;
+  color: #6f8179;
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.department-pill.multiple {
+  border: 1px solid #c8d9d2;
+  background: #f3f7f5;
+  color: #355e50;
+}
+
+.split-action {
+  border: 1px solid #c8d7d1;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #f7faf8;
+  color: #3f6256;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.job-part-row td {
+  background: #f8fbf9;
+  border-bottom-color: #e1ebe6;
+}
+
+.job-part-row td:first-child {
+  box-shadow: inset 3px 0 #9bbcac;
+}
+
+.job-part-row:hover td {
+  background: #f1f7f4;
+}
+
+.part-code {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-left: 9px;
+}
+
+.part-code span {
+  color: #85a397;
+}
+
+.part-code b {
+  color: #155f48;
+  font-size: 11px;
+}
+
+.part-label {
+  color: #73877e;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+
+.split-job-dialog {
+  width: min(900px, 100%);
+}
+
+.split-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin: 18px 0;
+  border: 1px solid #cfe0d8;
+  border-radius: 9px;
+  padding: 12px 14px;
+  background: #f2f8f5;
+  color: #436459;
+  font-size: 12px;
+}
+
+.split-parts {
+  display: grid;
+  gap: 10px;
+}
+
+.split-part-card {
+  display: grid;
+  grid-template-columns: minmax(150px,.75fr) minmax(220px,1.4fr) minmax(90px,.45fr);
+  gap: 10px;
+  align-items: end;
+  border: 1px solid #dbe6e1;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.split-part-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.split-part-heading span {
+  color: #155f48;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .05em;
+}
+
+.split-part-heading button,
+.add-part-button {
+  border: 0;
+  background: transparent;
+  color: #55766a;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.split-part-card label > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #52675f;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.split-part-card input {
+  width: 100%;
+  border: 1px solid #cfdad5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.add-part-button {
+  margin: 10px 0 18px;
+  border: 1px dashed #a9c0b5;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #f7faf8;
+  color: #155f48;
+}
+
+.split-note {
+  color: #6c7f77;
+  font-size: 11px;
+}
+
+.part-label-sheet .reprint-details span:last-child {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid #dfe7e3;
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .split-part-card {
+    grid-template-columns: 1fr;
+  }
+
+  .split-part-heading {
+    grid-column: 1;
+  }
+
+  .split-note {
+    display: none;
+  }
+}
+
 .actions-drawer-heading.open .table-actions-toggle b {
   transform: rotate(180deg);
 }

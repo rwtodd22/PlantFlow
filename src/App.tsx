@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
-import { dataService, Department, Job, ScanEvent, seedState, StatusDefinition } from "../lib/dataService";
+import { dataService, Department, Job, JobPart, ScanEvent, seedState, StatusDefinition } from "../lib/dataService";
 import { parseScannerInput } from "../lib/scanner";
 import worthHigginsLogo from "./assets/WHALogo_Horizontal.png";
 import whaWhiteLogo from "./assets/WHA_White.png";
@@ -52,6 +52,31 @@ function deadlineTone(dueDate: string, enabled: boolean) {
   return "";
 }
 
+function jobIsClosed(job: Job, statuses: StatusDefinition[]) {
+  const parts = job.parts || [];
+  if (parts.length) return parts.every(part => statuses.find(status => status.name === part.status)?.closesJob);
+  return Boolean(statuses.find(status => status.name === job.status)?.closesJob);
+}
+
+function parentLocation(job: Job, deptName: (id: string) => string) {
+  const parts = job.parts || [];
+  if (!parts.length) return deptName(job.currentDepartmentId);
+  const locations = [...new Set(parts.map(part => part.currentDepartmentId))];
+  return locations.length === 1 ? deptName(locations[0]) : "Multiple locations";
+}
+
+function parentStatus(job: Job) {
+  const parts = job.parts || [];
+  if (!parts.length) return job.status;
+  const statuses = [...new Set(parts.map(part => part.status))];
+  return statuses.length === 1 ? statuses[0] : "Mixed status";
+}
+
+function parentUpdatedAt(job: Job) {
+  const parts = job.parts || [];
+  return parts.length ? [...parts].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0].updatedAt : job.updatedAt;
+}
+
 async function downloadExcelBackup(state: typeof seedState) {
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
@@ -60,7 +85,7 @@ async function downloadExcelBackup(state: typeof seedState) {
   workbook.created = new Date();
   workbook.modified = new Date();
   const departmentName = (id: string) => state.departments.find(item=>item.id===id)?.name || "Not started";
-  const activeJobs = state.jobs.filter(job=>!state.statuses.find(status=>status.name===job.status)?.closesJob);
+  const activeJobs = state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
   const headerFill = "155F48";
   const lightFill = "F4F7F5";
   const addSheet = (name:string, headers:string[], rows:(string|number|Date)[][], widths:number[], wrapColumns:number[] = []) => {
@@ -105,6 +130,11 @@ async function downloadExcelBackup(state: typeof seedState) {
   jobsSheet.getColumn(13).hidden=true;
   jobsSheet.getColumn(14).hidden=true;
   jobsSheet.getRow(1).height=29;
+  const partRows=state.jobs.flatMap(job=>(job.parts||[]).map(part=>[job.jobNumber,part.code,part.name,part.description,part.quantity,departmentName(part.currentDepartmentId),part.status,new Date(part.updatedAt),part.id,job.id]));
+  const partsSheet=addSheet("Job Parts",["Parent Job","Part Barcode","Part Name","Description","Quantity","Current Department","Status","Last Updated","Part ID","Parent Record ID"],partRows,[16,18,24,36,12,22,22,22,38,38],[3,4]);
+  partsSheet.getColumn(8).numFmt="mmm d, yyyy h:mm AM/PM";
+  partsSheet.getColumn(9).hidden=true;
+  partsSheet.getColumn(10).hidden=true;
   const summary=workbook.addWorksheet("Backup Summary");
   summary.columns=[{width:28},{width:50}];
   summary.mergeCells("A1:B1");
@@ -186,7 +216,9 @@ export default function Home() {
   const [jobDueDate, setJobDueDate] = useState(() => localDateValue(3));
   const [query, setQuery] = useState("");
   const [printJob, setPrintJob] = useState<Job | null>(null);
+  const [printPart, setPrintPart] = useState<{job:Job;part:JobPart} | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [splitJob, setSplitJob] = useState<Job | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "location" | "customer">("none");
   const [sortBy, setSortBy] = useState<"recent" | "due" | "priority" | "time" | "job" | "customer">("recent");
   const [jobControlsOpen, setJobControlsOpen] = useState(false);
@@ -291,26 +323,36 @@ export default function Home() {
       window.setTimeout(() => setPendingStatuses(current => current[department.id]?.expiresAt === expiresAt ? Object.fromEntries(Object.entries(current).filter(([key])=>key!==department.id)) : current),15050);
       return;
     }
-    const job = state.jobs.find(j => j.jobNumber.toUpperCase() === parsed.jobNumber);
-    if (!job) { setNotice({ kind: "error", title: "Job not found", detail: `No active job matches ${parsed.jobNumber}.` }); return; }
-    const currentStatus = state.statuses.find(item => item.name === job.status);
+    const directJob = state.jobs.find(j => j.jobNumber.toUpperCase() === parsed.jobNumber);
+    const partMatch = state.jobs.flatMap(job => (job.parts || []).map(part => ({job,part}))).find(item => item.part.code.toUpperCase() === parsed.jobNumber);
+    const job = directJob || partMatch?.job;
+    const part = partMatch?.part;
+    if (!job) { setNotice({ kind: "error", title: "Job not found", detail: `No active job or job part matches ${parsed.jobNumber}.` }); return; }
+    if (directJob?.parts?.length) { setNotice({ kind: "error", title: `Job ${job.jobNumber} is split into parts`, detail: "Scan the barcode attached to the specific part instead of the original parent-job barcode." }); return; }
+    const currentStatus = state.statuses.find(item => item.name === (part?.status || job.status));
     if (currentStatus?.closesJob) { setNotice({ kind: "error", title: `Job is ${job.status.toLowerCase()}`, detail: "Reopen the job before scanning it again." }); return; }
     const pending = pendingStatuses[department.id] || pendingStatuses.__global__;
     const commandedStatus = pending && pending.expiresAt > Date.now() ? state.statuses.find(item=>item.id===pending.statusId&&item.enabled) : undefined;
     const normalStatus = state.statuses.find(item=>item.code==="IN_PRODUCTION") || state.statuses.find(item=>item.enabled&&!item.closesJob);
     if (pending) setPendingStatuses(current => Object.fromEntries(Object.entries(current).filter(([key])=>key!==department.id&&key!=="__global__")));
     const previous = state.scans[0];
-    if (!commandedStatus && previous?.jobNumber === job.jobNumber && previous.departmentId === department.id && Date.now() - new Date(previous.timestamp).getTime() < 30000) {
-      setNotice({ kind: "duplicate", title: "Scan already received", detail: `${job.jobNumber} is already in ${department.name}.` }); return;
+    const trackedCode = part?.code || job.jobNumber;
+    if (!commandedStatus && previous?.jobNumber === trackedCode && previous.departmentId === department.id && Date.now() - new Date(previous.timestamp).getTime() < 30000) {
+      setNotice({ kind: "duplicate", title: "Scan already received", detail: `${trackedCode} is already in ${department.name}.` }); return;
     }
     const now = new Date().toISOString();
     const routeIndex = job.route.indexOf(department.id);
-    const currentIndex = job.route.indexOf(job.currentDepartmentId);
-    const event: ScanEvent = { id: crypto.randomUUID(), jobNumber: job.jobNumber, departmentId: department.id, departmentName: department.name, previousDepartmentId: job.currentDepartmentId, timestamp: now, type: commandedStatus ? "Status command" : routeIndex === currentIndex + 1 || currentIndex === -1 ? "Normal" : "Route exception", statusName: commandedStatus?.name };
+    const previousDepartmentId = part?.currentDepartmentId || job.currentDepartmentId;
+    const currentIndex = job.route.indexOf(previousDepartmentId);
+    const event: ScanEvent = { id: crypto.randomUUID(), jobNumber: trackedCode, departmentId: department.id, departmentName: department.name, previousDepartmentId, timestamp: now, type: commandedStatus ? "Status command" : routeIndex === currentIndex + 1 || currentIndex === -1 ? "Normal" : "Route exception", statusName: commandedStatus?.name, partId: part?.id, partCode: part?.code, partName: part?.name };
     const nextStatus = commandedStatus?.name || normalStatus?.name || "In Production";
-    const jobs = state.jobs.map(j => j.id === job.id ? { ...j, currentDepartmentId: department.id, status: nextStatus, updatedAt: now } : j);
+    const jobs = state.jobs.map(j => {
+      if (j.id !== job.id) return j;
+      if (!part) return { ...j, currentDepartmentId: department.id, status: nextStatus, updatedAt: now };
+      return { ...j, updatedAt: now, parts: (j.parts || []).map(item => item.id === part.id ? { ...item, currentDepartmentId: department.id, status: nextStatus, updatedAt: now } : item) };
+    });
     persist({ ...state, jobs, scans: [event, ...state.scans] });
-    setNotice({ kind: "success", title: commandedStatus ? `${job.jobNumber} changed to ${commandedStatus.name}` : `${job.jobNumber} moved to ${department.name}`, detail: `${department.name} · ${job.customer} · ${new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` });
+    setNotice({ kind: "success", title: commandedStatus ? `${trackedCode} changed to ${commandedStatus.name}` : `${trackedCode} moved to ${department.name}`, detail: `${part ? `${part.name} · ` : ""}${department.name} · ${job.customer} · ${new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` });
   }, [state, persist, pendingStatuses]);
 
   useEffect(() => {
@@ -336,33 +378,34 @@ export default function Home() {
   const departments = state.departments;
   const statuses = state.statuses;
   const deptName = (id: string) => departments.find(d => d.id === id)?.name || "Not started";
-  const activeJobs = state.jobs.filter(job => !statuses.find(status=>status.name===job.status)?.closesJob);
+  const activeJobs = state.jobs.filter(job => !jobIsClosed(job,statuses));
   const filteredJobs = activeJobs.filter(j => `${j.jobNumber} ${j.customer} ${j.description}`.toLowerCase().includes(query.toLowerCase()));
   const organizedJobs = useMemo(() => {
     const priorityRank = { Critical: 0, Rush: 1, Standard: 2 };
     return [...filteredJobs].sort((a,b) => {
       if (sortBy === "due") return a.dueDate.localeCompare(b.dueDate);
       if (sortBy === "priority") return priorityRank[a.priority] - priorityRank[b.priority] || a.dueDate.localeCompare(b.dueDate);
-      if (sortBy === "time") return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      if (sortBy === "time") return new Date(parentUpdatedAt(a)).getTime() - new Date(parentUpdatedAt(b)).getTime();
       if (sortBy === "job") return a.jobNumber.localeCompare(b.jobNumber, undefined, { numeric: true });
       if (sortBy === "customer") return a.customer.localeCompare(b.customer);
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      return new Date(parentUpdatedAt(b)).getTime() - new Date(parentUpdatedAt(a)).getTime();
     });
   }, [filteredJobs, sortBy]);
   const jobGroups = useMemo(() => {
     if (groupBy === "none") return [{ key: "all", label: "All active jobs", jobs: organizedJobs }];
     const grouped = new Map<string, Job[]>();
     organizedJobs.forEach(job => {
-      const key = groupBy === "location" ? (job.currentDepartmentId || "not-started") : job.customer;
+      const partLocations = [...new Set((job.parts || []).map(part=>part.currentDepartmentId))];
+      const key = groupBy === "location" ? (partLocations.length > 1 ? "multiple-locations" : (partLocations[0] || job.currentDepartmentId || "not-started")) : job.customer;
       grouped.set(key, [...(grouped.get(key) || []), job]);
     });
-    return [...grouped.entries()].map(([key,jobs]) => ({ key, label: groupBy === "location" ? deptName(key === "not-started" ? "" : key) : key, jobs }));
+    return [...grouped.entries()].map(([key,jobs]) => ({ key, label: groupBy === "location" ? (key === "multiple-locations" ? "Multiple locations" : deptName(key === "not-started" ? "" : key)) : key, jobs }));
   }, [groupBy, organizedJobs, departments]);
   const today = new Date().toISOString().slice(0,10);
 
   const saveStatuses = (nextStatuses: StatusDefinition[]) => {
     const renameMap = new Map(statuses.map(oldStatus => [oldStatus.name,nextStatuses.find(item=>item.id===oldStatus.id)?.name||oldStatus.name]));
-    persist({...state,statuses:nextStatuses,jobs:state.jobs.map(job=>({...job,status:renameMap.get(job.status)||job.status}))});
+    persist({...state,statuses:nextStatuses,jobs:state.jobs.map(job=>({...job,status:renameMap.get(job.status)||job.status,parts:job.parts?.map(part=>({...part,status:renameMap.get(part.status)||part.status}))}))});
     setNotice({kind:"success",title:"Statuses updated",detail:"Status names, commands, colors, and availability were saved."});
   };
 
@@ -411,6 +454,29 @@ export default function Home() {
       title: `Job ${job.jobNumber} updated`,
       detail: field === "location" ? `Location changed to ${departmentName}.` : `Status changed to ${value}.`,
     });
+  };
+
+  const updatePartInline = (job: Job, part: JobPart, field: "location" | "status", value: string) => {
+    if ((field === "location" && value === part.currentDepartmentId) || (field === "status" && value === part.status)) return;
+    const now = new Date().toISOString();
+    const departmentId = field === "location" ? value : part.currentDepartmentId;
+    const statusName = field === "status" ? value : undefined;
+    const updatedPart = { ...part, currentDepartmentId: departmentId, status: statusName || part.status, updatedAt: field === "location" ? now : part.updatedAt };
+    const event: ScanEvent = { id: crypto.randomUUID(), jobNumber: part.code, departmentId, departmentName: deptName(departmentId), previousDepartmentId: part.currentDepartmentId, timestamp: now, type: "Manual", statusName, partId: part.id, partCode: part.code, partName: part.name };
+    persist({ ...state, jobs: state.jobs.map(item => item.id === job.id ? { ...item, updatedAt: now, parts: (item.parts || []).map(candidate => candidate.id === part.id ? updatedPart : candidate) } : item), scans: [event, ...state.scans] });
+    setNotice({ kind: "success", title: `${part.code} updated`, detail: field === "location" ? `${part.name} moved to ${deptName(departmentId)}.` : `${part.name} changed to ${value}.` });
+  };
+
+  const saveJobSplit = (job: Job, parts: Array<Pick<JobPart,"name"|"description"|"quantity">>) => {
+    const now = new Date().toISOString();
+    const createdParts: JobPart[] = parts.map((part,index) => ({ id: crypto.randomUUID(), code: `${job.jobNumber}-${String.fromCharCode(65+index)}`, name: part.name.trim() || `Part ${String.fromCharCode(65+index)}`, description: part.description.trim(), quantity: part.quantity.trim(), currentDepartmentId: job.currentDepartmentId, status: job.status, updatedAt: now }));
+    const existingCodes = new Set(state.jobs.flatMap(item => [item.jobNumber.toUpperCase(),...(item.parts||[]).map(part=>part.code.toUpperCase())]));
+    const conflict = createdParts.find(part => existingCodes.has(part.code.toUpperCase()));
+    if (conflict) { setNotice({ kind: "error", title: "Part barcode already exists", detail: `${conflict.code} is already assigned to another job or part.` }); return; }
+    persist({ ...state, jobs: state.jobs.map(item => item.id === job.id ? { ...item, parts: createdParts, updatedAt: now } : item) });
+    setSplitJob(null);
+    setJobActionsOpen(true);
+    setNotice({ kind: "success", title: `Job ${job.jobNumber} split into ${createdParts.length} parts`, detail: "Expand the job to review the parts and print each part label before moving them independently." });
   };
 
   const createJob = (event: FormEvent<HTMLFormElement>) => {
@@ -472,16 +538,18 @@ export default function Home() {
         {jobGroups.map((group,index)=><section className={`panel job-group ${index===0&&jobControlsOpen?"controls-open":""}`} key={group.key}>
           <div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div>{index===0&&<div className="jobs-toolbar-actions"><button type="button" className="fullscreen-toggle" onClick={toggleActiveJobsFullscreen}><span aria-hidden="true">{jobsFullscreen?"↙":"⛶"}</span>{jobsFullscreen?"Exit full screen":"Full screen"}</button><button type="button" className="controls-toggle" aria-expanded={jobControlsOpen} aria-controls="active-job-controls" onClick={()=>setJobControlsOpen(open=>!open)}><span>{jobControlsOpen?"Hide controls":"Search, organize & sort"}</span><b aria-hidden="true">⌄</b></button></div>}</div>
           {index===0&&jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}
-          <JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} showActions={jobActionsOpen} collapsibleActions onToggleActions={()=>setJobActionsOpen(open=>!open)} onPrint={setPrintJob} onOpen={setSelectedJob} departments={departments} statuses={statuses} onInlineUpdate={updateJobInline}/>
+          <JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} showActions={jobActionsOpen} collapsibleActions onToggleActions={()=>setJobActionsOpen(open=>!open)} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onOpen={setSelectedJob} onSplit={setSplitJob} departments={departments} statuses={statuses} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/>
         </section>)}
       </section>}
 
-      {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>Every scan is timestamped and retained.</p></div><span className="count-pill">{state.scans.length} events</span></div><div className="history-list">{state.scans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>}</div>})}</div></section>}
+      {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>Every scan is timestamped and retained.</p></div><span className="count-pill">{state.scans.length} events</span></div><div className="history-list">{state.scans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div></section>}
 
       {page === "admin" && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/><Admin departments={departments} statuses={statuses} deadlineHighlighting={state.settings.deadlineHighlighting} onToggleDeadlineHighlighting={(enabled)=>persist({...state,settings:{...state.settings,deadlineHighlighting:enabled}})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();setState(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
+    {printPart && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber} · {printPart.job.customer}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div></OverlayPortal>}
     {selectedJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><JobEditor key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} onClose={()=>setSelectedJob(null)} onSave={saveJobOverride} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}} /></OverlayPortal>}
+    {splitJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/></OverlayPortal>}
     {statusPrint && <StatusPrintSheet statuses={statusPrint} onClose={()=>setStatusPrint(null)} onPrint={printStatusBarcodes}/>} 
     {managementReport && <ManagementReport type={managementReport} state={state} onClose={()=>setManagementReport(null)} onPrint={printManagementReport}/>} 
   </div>;
@@ -489,21 +557,39 @@ export default function Home() {
 
 function Metric({label,value,sub,tone="blue"}:{label:string;value:number;sub:string;tone?:string}) { return <div className={`metric ${tone}`}><div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div><span>↗</span></div> }
 
-function JobTable({jobs,deptName,detailed=false,highlightDeadlines=false,showActions=true,collapsibleActions=false,onToggleActions,onPrint,onOpen,departments,statuses,onInlineUpdate}:{jobs:Job[];deptName:(id:string)=>string;detailed?:boolean;highlightDeadlines?:boolean;showActions?:boolean;collapsibleActions?:boolean;onToggleActions?:()=>void;onPrint?:(job:Job)=>void;onOpen?:(job:Job)=>void;departments?:Department[];statuses?:StatusDefinition[];onInlineUpdate?:(job:Job,field:"location"|"status",value:string)=>void}) {
+function JobTable({jobs,deptName,detailed=false,highlightDeadlines=false,showActions=true,collapsibleActions=false,onToggleActions,onPrint,onPrintPart,onOpen,onSplit,departments,statuses,onInlineUpdate,onInlinePartUpdate}:{jobs:Job[];deptName:(id:string)=>string;detailed?:boolean;highlightDeadlines?:boolean;showActions?:boolean;collapsibleActions?:boolean;onToggleActions?:()=>void;onPrint?:(job:Job)=>void;onPrintPart?:(job:Job,part:JobPart)=>void;onOpen?:(job:Job)=>void;onSplit?:(job:Job)=>void;departments?:Department[];statuses?:StatusDefinition[];onInlineUpdate?:(job:Job,field:"location"|"status",value:string)=>void;onInlinePartUpdate?:(job:Job,part:JobPart,field:"location"|"status",value:string)=>void}) {
   const actionsAvailable=Boolean(onPrint||onOpen);
   const actionsVisible=showActions&&actionsAvailable;
   const inlineEditing=Boolean(onInlineUpdate&&departments&&statuses);
-  return <div className="table-scroll"><table><thead><tr><th>Job</th><th>Customer / Description</th><th>Location</th><th>Status</th><th>Due</th>{detailed&&<th>Priority</th>}<th className="time-here-column">Time here</th>{collapsibleActions&&actionsAvailable?<th className={`actions-drawer-heading ${actionsVisible?"open":"closed"}`}><button type="button" className="table-actions-toggle" aria-label={actionsVisible?"Hide actions":"Show actions"} aria-expanded={actionsVisible} onClick={onToggleActions}><b aria-hidden="true">›</b><span className="actions-tooltip" role="tooltip">Actions</span></button></th>:actionsVisible&&<th className="actions-heading">Actions</th>}</tr></thead><tbody>{jobs.map(job=><tr key={job.id} className={`${onOpen?"reviewable-row ":""}${deadlineTone(job.dueDate,highlightDeadlines)}`.trim()} onDoubleClick={()=>onOpen?.(job)}><td><b className="job-num">{job.jobNumber}</b></td><td><b>{job.customer}</b><small>{job.description}</small></td><td>{inlineEditing?<select className="department-pill inline-pill-select" aria-label={`Change location for job ${job.jobNumber}`} title="Click to change location" value={job.currentDepartmentId} onClick={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>onInlineUpdate?.(job,"location",event.target.value)}><option value="">Not started</option>{departments?.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>:<span className="department-pill">{deptName(job.currentDepartmentId)}</span>}</td><td>{inlineEditing?<select className={`status-pill inline-pill-select ${statusTone[job.status]||"slate"}`} aria-label={`Change status for job ${job.jobNumber}`} title="Click to change status" value={job.status} onClick={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>onInlineUpdate?.(job,"status",event.target.value)}>{statuses?.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(item=><option key={item.id} value={item.name}>{item.name}</option>)}</select>:<span className={`status-pill ${statusTone[job.status]||"slate"}`}>{job.status}</span>}</td><td className={job.dueDate < localDateValue()?"overdue":""}>{formatDate(job.dueDate)}</td>{detailed&&<td><b className={`priority ${job.priority.toLowerCase()}`}>{job.priority}</b></td>}<td className="time-here-column">{timeAgo(job.updatedAt)}</td>{actionsVisible?<td className="actions-cell"><div className="row-actions">{onOpen&&<button className="review-action" onClick={()=>onOpen(job)}>Review</button>}{onPrint&&<button className="barcode-action" onClick={()=>onPrint(job)}>▥ Reprint</button>}</div></td>:collapsibleActions&&actionsAvailable?<td className="actions-closed-cell" aria-hidden="true"/>:null}</tr>)}</tbody></table>{!jobs.length&&<div className="empty">No matching active jobs.</div>}</div>
+  const partInlineEditing=Boolean(onInlinePartUpdate&&departments&&statuses);
+  const [expanded,setExpanded]=useState<Record<string,boolean>>({});
+  const locationOptions=<><option value="">Not started</option>{departments?.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</>;
+  const statusOptions=statuses?.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(item=><option key={item.id} value={item.name}>{item.name}</option>);
+  return <div className="table-scroll"><table><thead><tr><th>Job</th><th>Customer / Description</th><th>Location</th><th>Status</th><th>Due</th>{detailed&&<th>Priority</th>}<th className="time-here-column">Time here</th>{collapsibleActions&&actionsAvailable?<th className={`actions-drawer-heading ${actionsVisible?"open":"closed"}`}><button type="button" className="table-actions-toggle" aria-label={actionsVisible?"Hide actions":"Show actions"} aria-expanded={actionsVisible} onClick={onToggleActions}><b aria-hidden="true">›</b><span className="actions-tooltip" role="tooltip">Actions</span></button></th>:actionsVisible&&<th className="actions-heading">Actions</th>}</tr></thead><tbody>{jobs.map(job=>{
+    const parts=job.parts||[];
+    const split=parts.length>0;
+    const open=Boolean(expanded[job.id]);
+    const location=parentLocation(job,deptName);
+    const status=parentStatus(job);
+    return <Fragment key={job.id}><tr className={`${onOpen?"reviewable-row ":""}${split?"split-parent-row ":""}${deadlineTone(job.dueDate,highlightDeadlines)}`.trim()} onDoubleClick={()=>onOpen?.(job)}><td><div className="job-number-cell">{split&&<button type="button" className="parts-toggle" aria-label={`${open?"Hide":"Show"} parts for job ${job.jobNumber}`} aria-expanded={open} onClick={event=>{event.stopPropagation();setExpanded(current=>({...current,[job.id]:!open}))}}>{open?"⌄":"›"}</button>}<b className="job-num">{job.jobNumber}</b>{split&&<small className="parts-count">{parts.length} parts</small>}</div></td><td><b>{job.customer}</b><small>{job.description}</small></td><td>{inlineEditing&&!split?<select className="department-pill inline-pill-select" aria-label={`Change location for job ${job.jobNumber}`} title="Click to change location" value={job.currentDepartmentId} onClick={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>onInlineUpdate?.(job,"location",event.target.value)}>{locationOptions}</select>:<span className={`department-pill ${split&&location==="Multiple locations"?"multiple":""}`}>{location}</span>}</td><td>{inlineEditing&&!split?<select className={`status-pill inline-pill-select ${statusTone[job.status]||"slate"}`} aria-label={`Change status for job ${job.jobNumber}`} title="Click to change status" value={job.status} onClick={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>onInlineUpdate?.(job,"status",event.target.value)}>{statusOptions}</select>:<span className={`status-pill ${statusTone[status]||"slate"}`}>{status}</span>}</td><td className={job.dueDate < localDateValue()?"overdue":""}>{formatDate(job.dueDate)}</td>{detailed&&<td><b className={`priority ${job.priority.toLowerCase()}`}>{job.priority}</b></td>}<td className="time-here-column">{timeAgo(parentUpdatedAt(job))}</td>{actionsVisible?<td className="actions-cell"><div className="row-actions">{onOpen&&<button className="review-action" onClick={()=>onOpen(job)}>Review</button>}{onPrint&&!split&&<button className="barcode-action" onClick={()=>onPrint(job)}>▥ Reprint</button>}{onSplit&&!split&&<button className="split-action" onClick={()=>onSplit(job)}>Split</button>}</div></td>:collapsibleActions&&actionsAvailable?<td className="actions-closed-cell" aria-hidden="true"/>:null}</tr>{open&&parts.map(part=><tr key={part.id} className="job-part-row"><td><div className="part-code"><span>↳</span><b>{part.code}</b></div></td><td><b>{part.name}</b><small>{part.description||"Job part"}{part.quantity?` · Qty ${part.quantity}`:""}</small></td><td>{partInlineEditing?<select className="department-pill inline-pill-select" aria-label={`Change location for ${part.code}`} value={part.currentDepartmentId} onChange={event=>onInlinePartUpdate?.(job,part,"location",event.target.value)}>{locationOptions}</select>:<span className="department-pill">{deptName(part.currentDepartmentId)}</span>}</td><td>{partInlineEditing?<select className={`status-pill inline-pill-select ${statusTone[part.status]||"slate"}`} aria-label={`Change status for ${part.code}`} value={part.status} onChange={event=>onInlinePartUpdate?.(job,part,"status",event.target.value)}>{statusOptions}</select>:<span className={`status-pill ${statusTone[part.status]||"slate"}`}>{part.status}</span>}</td><td>{formatDate(job.dueDate)}</td>{detailed&&<td><span className="part-label">PART</span></td>}<td className="time-here-column">{timeAgo(part.updatedAt)}</td>{actionsVisible?<td className="actions-cell">{onPrintPart&&<button className="barcode-action" onClick={()=>onPrintPart(job,part)}>▥ Reprint</button>}</td>:collapsibleActions&&actionsAvailable?<td className="actions-closed-cell"/>:null}</tr>)}</Fragment>
+  })}</tbody></table>{!jobs.length&&<div className="empty">No matching active jobs.</div>}</div>
 }
 
 function ScanList({scans,detailed=false}:{scans:ScanEvent[];detailed?:boolean}) { return <div className="scan-list">{scans.map(scan=><div className="scan-item" key={scan.id}><span className="scan-check">✓</span><div><b>Job {scan.jobNumber}</b><small>{scan.statusName?`Changed to ${scan.statusName} in ${scan.departmentName}`:`Moved to ${scan.departmentName}`}{detailed?` · ${scan.type}`:""}</small></div><time>{timeAgo(scan.timestamp)}</time></div>)}</div> }
+
+function SplitJobDialog({job,onClose,onSave}:{job:Job;onClose:()=>void;onSave:(parts:Array<Pick<JobPart,"name"|"description"|"quantity">>)=>void}) {
+  const [parts,setParts]=useState([{name:"Part A",description:"",quantity:""},{name:"Part B",description:"",quantity:""}]);
+  const update=(index:number,field:"name"|"description"|"quantity",value:string)=>setParts(current=>current.map((part,partIndex)=>partIndex===index?{...part,[field]:value}:part));
+  const addPart=()=>setParts(current=>current.length>=26?current:[...current,{name:`Part ${String.fromCharCode(65+current.length)}`,description:"",quantity:""}]);
+  return <div className="job-editor-overlay" role="dialog" aria-modal="true" aria-label={`Split job ${job.jobNumber}`}><form className="job-editor split-job-dialog" onSubmit={event=>{event.preventDefault();onSave(parts)}}><div className="editor-head"><div><p className="eyebrow">OPTIONAL MULTI-PART TRACKING</p><h2>Split Job {job.jobNumber}</h2><p>Create one barcode for each physical portion that will move independently.</p></div><button type="button" aria-label="Close split job" onClick={onClose}>×</button></div><div className="split-guidance"><b>The original job remains the parent record.</b><span>Once split, employees scan the individual part labels—not the original job barcode.</span></div><div className="split-parts">{parts.map((part,index)=><div className="split-part-card" key={index}><div className="split-part-heading"><span>{job.jobNumber}-{String.fromCharCode(65+index)}</span>{parts.length>2&&<button type="button" onClick={()=>setParts(current=>current.filter((_,partIndex)=>partIndex!==index))}>Remove</button>}</div><label><span>Part name *</span><input required value={part.name} onChange={event=>update(index,"name",event.target.value)} placeholder="e.g. Routed panels"/></label><label><span>Description</span><input value={part.description} onChange={event=>update(index,"description",event.target.value)} placeholder="What physically belongs with this part?"/></label><label><span>Quantity</span><input value={part.quantity} onChange={event=>update(index,"quantity",event.target.value)} placeholder="Optional"/></label></div>)}</div><button type="button" className="add-part-button" onClick={addPart}>+ Add another part</button><div className="editor-actions"><span className="split-note">You can reprint every part label from the expanded job row.</span><div><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Create Parts</button></div></div></form></div>
+}
 
 function JobEditor({job,departments,statuses,onClose,onSave,onPrint}:{job:Job;departments:Department[];statuses:StatusDefinition[];onClose:()=>void;onSave:(original:Job,updated:Job,minutesHere:number)=>void;onPrint:()=>void}) {
   const [draft,setDraft]=useState(job);
   const initialMinutes=Math.max(0,Math.floor((Date.now()-new Date(job.updatedAt).getTime())/60000));
   const [minutesHere,setMinutesHere]=useState(initialMinutes);
   const change=(field:keyof Job,value:string)=>setDraft(current=>({...current,[field]:value}));
-  return <div className="job-editor-overlay" role="dialog" aria-modal="true" aria-label={`Review job ${job.jobNumber}`}><form className="job-editor" onSubmit={event=>{event.preventDefault();onSave(job,draft,minutesHere)}}><div className="editor-head"><div><p className="eyebrow">JOB RECORD & MANUAL OVERRIDE</p><h2>Review Job {job.jobNumber}</h2><p>Changes made here override the current production record.</p></div><button type="button" aria-label="Close job record" onClick={onClose}>×</button></div><div className="editor-grid"><label><span>Job number</span><input required value={draft.jobNumber} onChange={e=>change("jobNumber",e.target.value.toUpperCase())}/></label><label><span>Customer</span><input required value={draft.customer} onChange={e=>change("customer",e.target.value)}/></label><label className="wide"><span>Description</span><textarea required rows={2} value={draft.description} onChange={e=>change("description",e.target.value)}/></label><label><span>Location</span><select value={draft.currentDepartmentId} onChange={e=>change("currentDepartmentId",e.target.value)}><option value="">Not started</option>{departments.filter(item=>item.enabled).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>Status</span><select value={draft.status} onChange={e=>change("status",e.target.value)}>{statuses.filter(item=>item.enabled||item.name===draft.status).sort((a,b)=>a.order-b.order).map(item=><option key={item.id}>{item.name}</option>)}</select></label><label><span>Due date</span><CalendarDatePicker value={draft.dueDate} onChange={value=>change("dueDate",value)}/></label><label><span>Priority</span><select value={draft.priority} onChange={e=>change("priority",e.target.value)}><option>Standard</option><option>Rush</option><option>Critical</option></select></label><label><span>Time in current location</span><div className="time-input"><input type="number" min="0" value={minutesHere} onChange={e=>setMinutesHere(Number(e.target.value))}/><b>minutes</b></div><small>Adjusting this changes the “Time Here” clock.</small></label><label className="wide"><span>Production notes</span><textarea rows={3} value={draft.notes} onChange={e=>change("notes",e.target.value)}/></label></div><div className="editor-summary"><span><b>Created</b>{new Date(job.createdAt).toLocaleString()}</span><span><b>Last movement</b>{new Date(job.updatedAt).toLocaleString()}</span><span><b>Route steps</b>{job.route.length}</span></div><div className="editor-actions"><button type="button" className="secondary" onClick={onPrint}>▥ Reprint Barcode</button><div><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Save Manual Changes</button></div></div></form></div>
+  return <div className="job-editor-overlay" role="dialog" aria-modal="true" aria-label={`Review job ${job.jobNumber}`}><form className="job-editor" onSubmit={event=>{event.preventDefault();onSave(job,draft,minutesHere)}}><div className="editor-head"><div><p className="eyebrow">JOB RECORD & MANUAL OVERRIDE</p><h2>Review Job {job.jobNumber}</h2><p>Changes made here override the current production record.</p></div><button type="button" aria-label="Close job record" onClick={onClose}>×</button></div>{job.parts?.length&&<div className="split-guidance"><b>This job has {job.parts.length} independently tracked parts.</b><span>Change part locations and statuses from the expanded Active Jobs row.</span></div>}<div className="editor-grid"><label><span>Job number</span><input required value={draft.jobNumber} onChange={e=>change("jobNumber",e.target.value.toUpperCase())}/></label><label><span>Customer</span><input required value={draft.customer} onChange={e=>change("customer",e.target.value)}/></label><label className="wide"><span>Description</span><textarea required rows={2} value={draft.description} onChange={e=>change("description",e.target.value)}/></label><label><span>Location</span><select disabled={Boolean(job.parts?.length)} value={draft.currentDepartmentId} onChange={e=>change("currentDepartmentId",e.target.value)}><option value="">Not started</option>{departments.filter(item=>item.enabled).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>Status</span><select disabled={Boolean(job.parts?.length)} value={draft.status} onChange={e=>change("status",e.target.value)}>{statuses.filter(item=>item.enabled||item.name===draft.status).sort((a,b)=>a.order-b.order).map(item=><option key={item.id}>{item.name}</option>)}</select></label><label><span>Due date</span><CalendarDatePicker value={draft.dueDate} onChange={value=>change("dueDate",value)}/></label><label><span>Priority</span><select value={draft.priority} onChange={e=>change("priority",e.target.value)}><option>Standard</option><option>Rush</option><option>Critical</option></select></label><label><span>Time in current location</span><div className="time-input"><input type="number" min="0" disabled={Boolean(job.parts?.length)} value={minutesHere} onChange={e=>setMinutesHere(Number(e.target.value))}/><b>minutes</b></div><small>{job.parts?.length?"Each part maintains its own Time Here clock.":"Adjusting this changes the “Time Here” clock."}</small></label><label className="wide"><span>Production notes</span><textarea rows={3} value={draft.notes} onChange={e=>change("notes",e.target.value)}/></label></div><div className="editor-summary"><span><b>Created</b>{new Date(job.createdAt).toLocaleString()}</span><span><b>Last movement</b>{new Date(job.updatedAt).toLocaleString()}</span><span><b>Route steps</b>{job.route.length}</span></div><div className="editor-actions">{!job.parts?.length?<button type="button" className="secondary" onClick={onPrint}>▥ Reprint Barcode</button>:<span/>}<div><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary">Save Manual Changes</button></div></div></form></div>
 }
 
 function StatusPrintSheet({statuses,onClose,onPrint}:{statuses:StatusDefinition[];onClose:()=>void;onPrint:()=>void}) { return <div className="status-sheet-overlay" role="dialog" aria-modal="true"><div className="status-sheet-modal"><div className="reprint-head"><div><p className="eyebrow">LAMINATED STATION COMMANDS</p><h2>Status barcode sheet</h2></div><button onClick={onClose}>×</button></div><div className="status-print-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><h1>PRODUCTION STATUS COMMANDS</h1><p>Scan a status first, then scan one job within 15 seconds.</p><div className="status-label-grid">{statuses.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(status=><div className="status-label" key={status.id} style={{borderTopColor:status.color}}><strong>{status.name}</strong><Code128 value={`STATUS:${status.code}`}/><small>STATUS:{status.code}</small></div>)}</div></div><div className="reprint-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={onPrint}>Print Status Barcodes</button></div></div></div> }
@@ -515,7 +601,7 @@ function ReportsBackupPanel({onReport,onBackup}:{onReport:(type:ReportType)=>voi
 function ManagementReport({type,state,onClose,onPrint}:{type:ReportType;state:typeof seedState;onClose:()=>void;onPrint:()=>void}) {
   if (type === "daily") return <DailyBriefReport state={state} onClose={onClose} onPrint={onPrint}/>;
   const departmentName=(id:string)=>state.departments.find(item=>item.id===id)?.name||"Not started";
-  const active=state.jobs.filter(job=>!state.statuses.find(status=>status.name===job.status)?.closesJob);
+  const active=state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
   const overdue=active.filter(job=>job.dueDate<localDateValue());
   const dueSoon=active.filter(job=>job.dueDate>=localDateValue()&&job.dueDate<=localDateValue(2));
   const risks=active.filter(job=>job.dueDate<=localDateValue(2)||job.priority!=="Standard"||["On Hold","Waiting for Materials","Rework"].includes(job.status)).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
@@ -531,7 +617,7 @@ function DailyBriefReport({state,onClose,onPrint}:{state:typeof seedState;onClos
   const reportDate=new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const weekEnd=localDateValue(7);
   const departmentName=(id:string)=>state.departments.find(item=>item.id===id)?.name||"Not started";
-  const active=state.jobs.filter(job=>!state.statuses.find(status=>status.name===job.status)?.closesJob);
+  const active=state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
   const dueToday=active.filter(job=>job.status!=="On Hold"&&job.dueDate===today);
   const overdue=active.filter(job=>job.status!=="On Hold"&&job.dueDate<today);
   const dueThisWeek=active.filter(job=>job.status!=="On Hold"&&job.dueDate>=today&&job.dueDate<=weekEnd).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
