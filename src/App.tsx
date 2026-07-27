@@ -8,7 +8,7 @@ import { parseScannerInput } from "../lib/scanner";
 import worthHigginsLogo from "./assets/WHALogo_Horizontal.png";
 import whaWhiteLogo from "./assets/WHA_White.png";
 
-type Page = "dashboard" | "scanner" | "create" | "jobs" | "history" | "admin";
+type Page = "dashboard" | "create" | "jobs" | "history" | "admin";
 type Notice = { kind: "success" | "error" | "duplicate"; title: string; detail: string } | null;
 type ReportType = "daily" | "snapshot" | "workload" | "risks";
 
@@ -16,7 +16,6 @@ const nav: { id: Page; label: string; icon: string }[] = [
   { id: "create", label: "Create Job", icon: "+" },
   { id: "jobs", label: "Active Jobs", icon: "≡" },
   { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
-  { id: "scanner", label: "Scanner Station", icon: "⌁" },
   { id: "history", label: "Job History", icon: "↺" },
   { id: "admin", label: "Administration", icon: "⚙" },
 ];
@@ -182,7 +181,6 @@ export default function Home() {
   const [page, setPage] = useState<Page>("jobs");
   const [state, setState] = useState(seedState);
   const [notice, setNotice] = useState<Notice>(null);
-  const [manualScan, setManualScan] = useState("PRINT|590036");
   const [jobNumberInput, setJobNumberInput] = useState("");
   const [labelJobNumber, setLabelJobNumber] = useState("");
   const [jobDueDate, setJobDueDate] = useState(() => localDateValue(3));
@@ -428,12 +426,6 @@ export default function Home() {
           <div className="panel span-2"><div className="panel-head"><div><h2>Active production</h2><p>Live location and timing for every open job</p></div><button className="text-button" onClick={()=>setPage("jobs")}>View all →</button></div><JobTable jobs={activeJobs.slice(0,6)} deptName={deptName} highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onOpen={setSelectedJob}/></div>
           <div className="panel"><div className="panel-head"><div><h2>Recent scans</h2><p>Latest shop-floor movements</p></div><span className="live-pill"><i/>LIVE</span></div><ScanList scans={state.scans.slice(0,5)} /></div>
         </div>
-      </section>}
-
-      {page === "scanner" && <section className="scanner-page">
-        <div className="scanner-hero"><div className="scanner-icon">⌁</div><p className="eyebrow">GLOBAL LISTENER</p><h2>Ready for the next scan</h2><p>Scan a job barcode with any configured department scanner. The department prefix tells PlantFlow where the job is.</p><div className="pulse-line"><i/> Listening for Bluetooth HID input</div></div>
-        <div className="panel manual-test"><div><h2>Manual scanner test</h2><p>Type or paste a sample scan to test the workflow without using the scanner.</p></div><form onSubmit={e=>{e.preventDefault();processScan(manualScan)}}><input aria-label="Manual scan" value={manualScan} onChange={e=>setManualScan(e.target.value.toUpperCase())}/><button className="primary">Process scan</button></form><div className="format-hint"><b>Expected format</b><code>PRINT|590036</code><span>Department prefix + job number + Enter</span></div></div>
-        <div className="panel"><div className="panel-head"><div><h2>Recent scanner activity</h2><p>The 10 most recent movements</p></div></div><ScanList scans={state.scans.slice(0,10)} detailed /></div>
       </section>}
 
       {page === "create" && <section className="create-grid">
