@@ -13,9 +13,9 @@ type Notice = { kind: "success" | "error" | "duplicate"; title: string; detail: 
 type ReportType = "daily" | "snapshot" | "workload" | "risks";
 
 const nav: { id: Page; label: string; icon: string }[] = [
+  { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
   { id: "create", label: "Create Job", icon: "+" },
   { id: "jobs", label: "Active Jobs", icon: "≡" },
-  { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
   { id: "history", label: "Job History", icon: "↺" },
   { id: "admin", label: "Administration", icon: "⚙" },
 ];
