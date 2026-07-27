@@ -228,7 +228,8 @@ td small,
   line-height: 1;
 }
 
-.controls-toggle {
+.controls-toggle,
+.actions-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -243,15 +244,26 @@ td small,
   font-weight: 750;
 }
 
-.controls-toggle:hover {
+.actions-toggle {
+  min-width: 82px;
+}
+
+.controls-toggle:hover,
+.actions-toggle:hover,
+.actions-toggle.active {
   border-color: #79a592;
   background: #f0f6f3;
 }
 
-.controls-toggle b {
+.controls-toggle b,
+.actions-toggle b {
   font-size: 12px;
   line-height: 1;
   transition: transform 0.18s ease;
+}
+
+.actions-toggle.active b {
+  transform: rotate(180deg);
 }
 
 .job-group.controls-open .controls-toggle b {
@@ -351,7 +363,17 @@ td small,
   gap: 6px;
 }
 
-.jobs-workspace:fullscreen th:last-child,
+.actions-heading,
+.actions-cell {
+  animation: actions-column-reveal 0.18s ease-out;
+}
+
+@keyframes actions-column-reveal {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.jobs-workspace:fullscreen th.actions-heading,
 .jobs-workspace:fullscreen td.actions-cell {
   position: sticky;
   right: 0;
@@ -360,7 +382,7 @@ td small,
   box-shadow: -8px 0 12px rgba(20,35,30,0.05);
 }
 
-.jobs-workspace:fullscreen th:last-child {
+.jobs-workspace:fullscreen th.actions-heading {
   z-index: 3;
 }
 
@@ -1492,6 +1514,7 @@ tr.deadline-overdue .status-pill.green {
   }
 
   .fullscreen-toggle,
+  .actions-toggle,
   .controls-toggle {
     flex: 1 1 0;
     min-width: 0;
