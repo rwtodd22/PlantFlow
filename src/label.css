@@ -955,6 +955,7 @@ tr.deadline-overdue .status-pill.green {
   place-items: center;
   padding: 22px;
   background: rgba(8, 25, 19, 0.76);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 
@@ -1259,6 +1260,7 @@ tr.deadline-overdue .status-pill.green {
   place-items: center;
   padding: 22px;
   background: rgba(8, 25, 19, 0.76);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 
@@ -1630,6 +1632,7 @@ tr.deadline-overdue .status-pill.green {
   place-items: center;
   padding: 20px;
   background: rgba(8,25,19,.76);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 
@@ -1704,6 +1707,7 @@ tr.deadline-overdue .status-pill.green {
   place-items: center;
   padding: 20px;
   background: rgba(8, 25, 19, 0.72);
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
 }
 

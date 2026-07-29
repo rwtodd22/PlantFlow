@@ -11,6 +11,8 @@ import whaWhiteLogo from "./assets/WHA_White.png";
 type Page = "dashboard" | "create" | "jobs" | "history" | "admin";
 type Notice = { kind: "success" | "error" | "duplicate"; title: string; detail: string } | null;
 type ReportType = "daily" | "snapshot" | "workload" | "risks";
+type SafariFullscreenDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
+type SafariFullscreenElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
 
 const nav: { id: Page; label: string; icon: string }[] = [
   { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
@@ -24,6 +26,11 @@ const statusTone: Record<string, string> = {
   "Ready for Production": "slate", "In Production": "blue", "On Hold": "amber",
   "Waiting for Materials": "orange", Rework: "red", Complete: "green", Canceled: "slate",
 };
+
+function makeId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `pf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 function timeAgo(value: string) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
@@ -162,8 +169,13 @@ async function downloadExcelBackup(state: typeof seedState) {
   const bytes = new Uint8Array(buffer);
   const url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
   const link = document.createElement("a");
-  link.href=url; link.download=`PlantFlow_Emergency_Backup_${localDateValue()}.xlsx`; link.click();
-  window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+  link.href=url;
+  link.download=`PlantFlow_Emergency_Backup_${localDateValue()}.xlsx`;
+  link.style.display="none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),10_000);
 }
 
 function Code128({ value }: { value: string }) {
@@ -255,16 +267,29 @@ export default function Home() {
     return () => window.removeEventListener("afterprint", finishPrinting);
   }, []);
   useEffect(() => {
-    const syncFullscreenState = () => setJobsFullscreen(document.fullscreenElement === activeJobsRef.current);
+    const safariDocument = document as SafariFullscreenDocument;
+    const syncFullscreenState = () => setJobsFullscreen((document.fullscreenElement || safariDocument.webkitFullscreenElement) === activeJobsRef.current);
     document.addEventListener("fullscreenchange", syncFullscreenState);
-    return () => document.removeEventListener("fullscreenchange", syncFullscreenState);
+    document.addEventListener("webkitfullscreenchange", syncFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreenState);
+    };
   }, []);
   const persist = useCallback((next: typeof state) => { setState(next); dataService.save(next); }, []);
 
   const toggleActiveJobsFullscreen = async () => {
     try {
-      if (document.fullscreenElement === activeJobsRef.current) await document.exitFullscreen();
-      else await activeJobsRef.current?.requestFullscreen();
+      const safariDocument = document as SafariFullscreenDocument;
+      const target = activeJobsRef.current as SafariFullscreenElement | null;
+      const fullscreenElement = document.fullscreenElement || safariDocument.webkitFullscreenElement;
+      if (fullscreenElement === target) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else await safariDocument.webkitExitFullscreen?.();
+      } else if (target) {
+        if (target.requestFullscreen) await target.requestFullscreen();
+        else await target.webkitRequestFullscreen?.();
+      }
     } catch {
       setNotice({ kind: "error", title: "Full screen could not open", detail: "Your browser blocked full screen. Try the button again or check the browser’s site permissions." });
     }
@@ -346,7 +371,7 @@ export default function Home() {
     const routeIndex = job.route.indexOf(department.id);
     const previousDepartmentId = part?.currentDepartmentId || job.currentDepartmentId;
     const currentIndex = job.route.indexOf(previousDepartmentId);
-    const event: ScanEvent = { id: crypto.randomUUID(), jobNumber: trackedCode, departmentId: department.id, departmentName: department.name, previousDepartmentId, timestamp: now, type: commandedStatus ? "Status command" : routeIndex === currentIndex + 1 || currentIndex === -1 ? "Normal" : "Route exception", statusName: commandedStatus?.name, partId: part?.id, partCode: part?.code, partName: part?.name };
+    const event: ScanEvent = { id: makeId(), jobNumber: trackedCode, departmentId: department.id, departmentName: department.name, previousDepartmentId, timestamp: now, type: commandedStatus ? "Status command" : routeIndex === currentIndex + 1 || currentIndex === -1 ? "Normal" : "Route exception", statusName: commandedStatus?.name, partId: part?.id, partCode: part?.code, partName: part?.name };
     const nextStatus = commandedStatus?.name || normalStatus?.name || "In Production";
     const jobs = state.jobs.map(j => {
       if (j.id !== job.id) return j;
@@ -359,6 +384,12 @@ export default function Home() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const editable = target?.matches("input, textarea, select, [contenteditable='true']");
+      if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey || editable) {
+        scanBuffer.current = "";
+        return;
+      }
       const now = performance.now();
       if (now - lastKeyAt.current > 90) scanBuffer.current = "";
       lastKeyAt.current = now;
@@ -421,7 +452,7 @@ export default function Home() {
     let scans = state.scans.map(scan => scan.jobNumber === original.jobNumber ? { ...scan, jobNumber: saved.jobNumber } : scan);
     if (saved.currentDepartmentId !== original.currentDepartmentId) {
       const department = departments.find(item => item.id === saved.currentDepartmentId);
-      scans = [{ id: crypto.randomUUID(), jobNumber: saved.jobNumber, departmentId: saved.currentDepartmentId, departmentName: department?.name || "Not started", previousDepartmentId: original.currentDepartmentId, timestamp: adjustedUpdatedAt, type: "Manual" as const }, ...scans];
+      scans = [{ id: makeId(), jobNumber: saved.jobNumber, departmentId: saved.currentDepartmentId, departmentName: department?.name || "Not started", previousDepartmentId: original.currentDepartmentId, timestamp: adjustedUpdatedAt, type: "Manual" as const }, ...scans];
     }
     persist({ ...state, jobs: state.jobs.map(job => job.id === original.id ? saved : job), scans });
     setSelectedJob(null);
@@ -448,7 +479,7 @@ export default function Home() {
       return;
     }
     const event: ScanEvent = {
-      id: crypto.randomUUID(),
+      id: makeId(),
       jobNumber: job.jobNumber,
       departmentId,
       departmentName,
@@ -471,14 +502,14 @@ export default function Home() {
     const departmentId = field === "location" ? value : part.currentDepartmentId;
     const statusName = field === "status" ? value : undefined;
     const updatedPart = { ...part, currentDepartmentId: departmentId, status: statusName || part.status, updatedAt: field === "location" ? now : part.updatedAt };
-    const event: ScanEvent = { id: crypto.randomUUID(), jobNumber: part.code, departmentId, departmentName: deptName(departmentId), previousDepartmentId: part.currentDepartmentId, timestamp: now, type: "Manual", statusName, partId: part.id, partCode: part.code, partName: part.name };
+    const event: ScanEvent = { id: makeId(), jobNumber: part.code, departmentId, departmentName: deptName(departmentId), previousDepartmentId: part.currentDepartmentId, timestamp: now, type: "Manual", statusName, partId: part.id, partCode: part.code, partName: part.name };
     persist({ ...state, jobs: state.jobs.map(item => item.id === job.id ? { ...item, updatedAt: now, parts: (item.parts || []).map(candidate => candidate.id === part.id ? updatedPart : candidate) } : item), scans: [event, ...state.scans] });
     setNotice({ kind: "success", title: `${part.code} updated`, detail: field === "location" ? `${part.name} moved to ${deptName(departmentId)}.` : `${part.name} changed to ${value}.` });
   };
 
   const saveJobSplit = (job: Job, parts: Array<Pick<JobPart,"name"|"description"|"quantity">>) => {
     const now = new Date().toISOString();
-    const createdParts: JobPart[] = parts.map((part,index) => ({ id: crypto.randomUUID(), code: `${job.jobNumber}-${String.fromCharCode(65+index)}`, name: part.name.trim() || `Part ${String.fromCharCode(65+index)}`, description: part.description.trim(), quantity: part.quantity.trim(), currentDepartmentId: job.currentDepartmentId, status: job.status, updatedAt: now }));
+    const createdParts: JobPart[] = parts.map((part,index) => ({ id: makeId(), code: `${job.jobNumber}-${String.fromCharCode(65+index)}`, name: part.name.trim() || `Part ${String.fromCharCode(65+index)}`, description: part.description.trim(), quantity: part.quantity.trim(), currentDepartmentId: job.currentDepartmentId, status: job.status, updatedAt: now }));
     const existingCodes = new Set(state.jobs.flatMap(item => [item.jobNumber.toUpperCase(),...(item.parts||[]).map(part=>part.code.toUpperCase())]));
     const conflict = createdParts.find(part => existingCodes.has(part.code.toUpperCase()));
     if (conflict) { setNotice({ kind: "error", title: "Part barcode already exists", detail: `${conflict.code} is already assigned to another job or part.` }); return; }
@@ -497,11 +528,11 @@ export default function Home() {
     const now = new Date().toISOString();
     const route = departments.filter(d => d.enabled && form.get(`route-${d.id}`)).map(d => d.id);
     const initialStatus=statuses.find(item=>item.code==="READY")?.name||"Ready for Production";
-    const parts: JobPart[]|undefined=createAsSplit?createParts.map((part,index)=>({id:crypto.randomUUID(),code:`${jobNumber}-${String.fromCharCode(65+index)}`,name:part.name.trim()||`Part ${String.fromCharCode(65+index)}`,description:part.description.trim(),quantity:part.quantity.trim(),currentDepartmentId:"",status:initialStatus,updatedAt:now})):undefined;
+    const parts: JobPart[]|undefined=createAsSplit?createParts.map((part,index)=>({id:makeId(),code:`${jobNumber}-${String.fromCharCode(65+index)}`,name:part.name.trim()||`Part ${String.fromCharCode(65+index)}`,description:part.description.trim(),quantity:part.quantity.trim(),currentDepartmentId:"",status:initialStatus,updatedAt:now})):undefined;
     const existingCodes=new Set(state.jobs.flatMap(item=>[item.jobNumber.toUpperCase(),...(item.parts||[]).map(part=>part.code.toUpperCase())]));
     const conflict=parts?.find(part=>existingCodes.has(part.code.toUpperCase()));
     if(conflict){setNotice({kind:"error",title:"Part barcode already exists",detail:`${conflict.code} is already assigned to another job or part.`});return;}
-    const job: Job = { id: crypto.randomUUID(), jobNumber, customer: String(form.get("customer")), description: String(form.get("description")), dueDate: String(form.get("dueDate")), priority: String(form.get("priority")) as Job["priority"], status: initialStatus, currentDepartmentId: "", route, notes: String(form.get("notes")), createdAt: now, updatedAt: now, parts };
+    const job: Job = { id: makeId(), jobNumber, customer: String(form.get("customer")), description: String(form.get("description")), dueDate: String(form.get("dueDate")), priority: String(form.get("priority")) as Job["priority"], status: initialStatus, currentDepartmentId: "", route, notes: String(form.get("notes")), createdAt: now, updatedAt: now, parts };
     persist({ ...state, jobs: [job, ...state.jobs] });
     setLabelJobNumber("");
     setJobNumberInput("");
@@ -664,6 +695,6 @@ function Admin({departments,statuses,deadlineHighlighting,onToggleDeadlineHighli
   const [statusDraft,setStatusDraft]=useState(statuses);
   const update=(id:string,field:keyof Department,value:string|boolean)=>setDraft(draft.map(d=>d.id===id?{...d,[field]:value}:d));
   const updateStatus=(id:string,field:keyof StatusDefinition,value:string|boolean)=>setStatusDraft(current=>current.map(status=>status.id===id?{...status,[field]:value}:status));
-  const addStatus=()=>setStatusDraft(current=>[...current,{id:crypto.randomUUID(),name:"New Status",code:`STATUS_${current.length+1}`,enabled:true,order:current.length+1,color:"#64748b",closesJob:false}]);
+  const addStatus=()=>setStatusDraft(current=>[...current,{id:makeId(),name:"New Status",code:`STATUS_${current.length+1}`,enabled:true,order:current.length+1,color:"#64748b",closesJob:false}]);
   return <section className="admin-workspace"><div className="admin-grid"><div className="panel"><div className="panel-head"><div><h2>Departments & scanner prefixes</h2><p>Rename, disable, or change prefixes as your workflow develops.</p></div><button className="primary small" onClick={()=>onSave(draft)}>Save departments</button></div><div className="department-editor">{[...draft].sort((a,b)=>a.order-b.order).map(d=><div key={d.id}><span className="drag">⠿</span><input value={d.name} onChange={e=>update(d.id,"name",e.target.value)}/><label className="prefix-input"><span>Prefix</span><input value={d.prefix} onChange={e=>update(d.id,"prefix",e.target.value.toUpperCase().replace(/\|/g,""))}/><b>|</b></label><label className="switch"><input type="checkbox" checked={d.enabled} onChange={e=>update(d.id,"enabled",e.target.checked)}/><span/></label></div>)}</div></div><aside className="panel settings-card"><h2>Pilot settings</h2><div className="setting deadline-setting"><div><b>Deadline highlighting</b><small>Yellow within 2 days; red when overdue</small></div><label className="switch" aria-label="Toggle deadline highlighting"><input type="checkbox" checked={deadlineHighlighting} onChange={e=>onToggleDeadlineHighlighting(e.target.checked)}/><span/></label></div><div className="setting"><div><b>Status command window</b><small>Status applies to the next job from that department</small></div><span>15 sec</span></div><div className="setting"><div><b>Duplicate scan window</b><small>Ignore repeat scans for 30 seconds</small></div><span>30 sec</span></div><div className="setting"><div><b>Storage mode</b><small>Device-local pilot data</small></div><span>Local</span></div><hr/><button className="danger-button" onClick={onReset}>Restore sample data</button></aside></div><div className="panel status-admin"><div className="panel-head"><div><h2>Statuses & laminated barcode commands</h2><p>One status barcode can be printed and posted at every station. The scanner prefix identifies the department.</p></div><div className="status-admin-actions"><button className="secondary" onClick={addStatus}>+ Add status</button><button className="secondary" onClick={()=>onPrintStatuses(statusDraft)}>▥ Print barcode sheet</button><button className="primary" onClick={()=>onSaveStatuses(statusDraft)}>Save statuses</button></div></div><div className="status-editor-head"><span>Color</span><span>Status name</span><span>Barcode command</span><span>Closes job</span><span>Enabled</span><span>Print</span></div><div className="status-editor">{[...statusDraft].sort((a,b)=>a.order-b.order).map(status=><div key={status.id}><input type="color" value={status.color} onChange={e=>updateStatus(status.id,"color",e.target.value)}/><input value={status.name} onChange={e=>updateStatus(status.id,"name",e.target.value)}/><label className="status-code"><span>STATUS:</span><input value={status.code} onChange={e=>updateStatus(status.id,"code",e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,""))}/></label><label className="check-label"><input type="checkbox" checked={status.closesJob} onChange={e=>updateStatus(status.id,"closesJob",e.target.checked)}/> Yes</label><label className="switch"><input type="checkbox" checked={status.enabled} onChange={e=>updateStatus(status.id,"enabled",e.target.checked)}/><span/></label><button className="barcode-action" onClick={()=>onPrintStatuses([status])}>▥ Print</button></div>)}</div></div></section>
 }
