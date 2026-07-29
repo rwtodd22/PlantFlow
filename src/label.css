@@ -2679,3 +2679,14 @@ tr.deadline-overdue .status-pill.green {
     print-color-adjust: exact !important;
   }
 }
+.sidebar nav button span .nav-history-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  margin: auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

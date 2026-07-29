@@ -20,7 +20,7 @@ const nav: { id: Page; label: string; icon: string }[] = [
   { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
   { id: "create", label: "Create Job", icon: "+" },
   { id: "jobs", label: "Active Jobs", icon: "≡" },
-  { id: "history", label: "Job History", icon: "↺" },
+  { id: "history", label: "Job History", icon: "history" },
   { id: "admin", label: "Administration", icon: "⚙" },
 ];
 
@@ -635,7 +635,7 @@ export default function Home() {
     <aside className="sidebar">
       <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed?"Expand navigation":"Collapse navigation"} title={sidebarCollapsed?"Expand menu":"Collapse menu"}>{sidebarCollapsed?"›":"‹"}</button>
       <div className="brand company-brand"><img className="full-brand-logo" src={worthHigginsLogo} alt="Worth Higgins & Associates" /><img className="compact-brand-logo" src={whaWhiteLogo} alt="WHA"/><div className="product-name"><strong>PlantFlow</strong><small>Production tracking</small></div></div>
-      <nav>{availableNav.map(item => <button key={item.id} className={page===item.id?"active":""} onClick={()=>setPage(item.id)} title={sidebarCollapsed?item.label:undefined} aria-label={item.label}><span>{item.icon}</span><b>{item.label}</b></button>)}</nav>
+      <nav>{availableNav.map(item => <button key={item.id} className={page===item.id?"active":""} onClick={()=>setPage(item.id)} title={sidebarCollapsed?item.label:undefined} aria-label={item.label}><span>{item.icon==="history"?<svg className="nav-history-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.8 6.4A6.5 6.5 0 1 1 3.5 10"/><path d="M2.7 5.3h3.6v3.6M10 6.6v3.8l2.6 1.5"/></svg>:item.icon}</span><b>{item.label}</b></button>)}</nav>
       <div className="system-card"><span className={`live-dot ${cloudStatus==="offline"?"offline":""}`}/><div><strong>{cloudStatus==="offline"?"Cloud connection interrupted":"PlantFlow Cloud connected"}</strong><small>{cloudStatus==="offline"?"Changes remain on this device":"Scanner listener active"}</small></div></div>
     </aside>
     <main>
