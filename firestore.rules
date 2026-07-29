@@ -44,5 +44,15 @@ service cloud.firestore {
       allow create, update: if canManageProduction();
       allow delete: if hasRole(['admin']);
     }
+
+    match /publicConfiguration/{documentId} {
+      allow read: if true;
+      allow write: if canManageProduction();
+    }
+
+    match /publicJobs/{jobId} {
+      allow read: if true;
+      allow write: if canManageProduction();
+    }
   }
 }

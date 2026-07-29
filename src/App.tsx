@@ -289,6 +289,9 @@ export default function Home() {
       setCloudError("");
       setState(remoteState);
       dataService.save(remoteState);
+      if (canEdit) void cloudDataService.ensurePublicState(remoteState).catch(error => {
+        setCloudError(error instanceof Error ? error.message : "The public viewer could not be initialized.");
+      });
     }, error => {
       cloudReady.current = false;
       setCloudStatus("offline");
@@ -685,7 +688,7 @@ export default function Home() {
   </div>;
 }
 
-function ReadOnlyPortal({state}:{state:typeof seedState}) {
+export function ReadOnlyPortal({state}:{state:typeof seedState}) {
   const [search,setSearch]=useState("");
   const [scope,setScope]=useState<"active"|"all">("active");
   const [group,setGroup]=useState<"none"|"department"|"customer"|"status"|"priority">("none");
@@ -785,7 +788,7 @@ function ViewerPortalAdminCard() {
       window.setTimeout(()=>setCopied(false),2000);
     } catch { setCopied(false); }
   };
-  return <section className="panel viewer-admin-card"><div className="viewer-admin-icon" aria-hidden="true"><span>◉</span></div><div className="viewer-admin-copy"><p className="eyebrow">READ-ONLY ACCESS</p><h2>Sales & Project Management Viewer</h2><p>A clean viewing portal with search, sorting, and views grouped by department, customer, status, or priority. It contains no edit, scanner, barcode, or administration controls.</p><div className="viewer-link-row"><input aria-label="Read-only portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer">Open viewer ↗</a></div><div className="viewer-local-warning"><b>Secure shared access</b><span>People opening this link must sign in with an enabled PlantFlow account. Viewer accounts receive read-only access to the same live production data.</span></div></div></section>;
+  return <section className="panel viewer-admin-card"><div className="viewer-admin-icon" aria-hidden="true"><span>◉</span></div><div className="viewer-admin-copy"><p className="eyebrow">PUBLIC READ-ONLY ACCESS</p><h2>Sales & Project Management Viewer</h2><p>A clean viewing portal with search, sorting, and views grouped by department, customer, status, or priority. It contains no edit, scanner, barcode, production-note, or administration controls.</p><div className="viewer-link-row"><input aria-label="Read-only portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer">Open viewer ↗</a></div><div className="viewer-local-warning"><b>No login required</b><span>Anyone with this link can view the live production fields shown in the portal. They cannot change jobs or access PlantFlow administration.</span></div></div></section>;
 }
 
 function ReportsBackupPanel({onReport,onBackup}:{onReport:(type:ReportType)=>void;onBackup:()=>void}) {

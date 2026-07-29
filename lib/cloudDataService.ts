@@ -1,10 +1,12 @@
-import { Unsubscribe, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
+import { Unsubscribe, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
 
 const configurationDocument = doc(db, "configuration", "plantflow");
 const jobsCollection = collection(db, "jobs");
 const scansCollection = collection(db, "scanEvents");
+const publicConfigurationDocument = doc(db, "publicConfiguration", "plantflow");
+const publicJobsCollection = collection(db, "publicJobs");
 
 type Configuration = Pick<AppState, "departments" | "statuses" | "settings">;
 
@@ -14,6 +16,10 @@ function configurationOf(state: AppState): Configuration {
 
 function changed(left: unknown, right: unknown) {
   return JSON.stringify(left) !== JSON.stringify(right);
+}
+
+function publicJob(job: Job): Job {
+  return { ...job, notes: "" };
 }
 
 export const cloudDataService = {
@@ -60,13 +66,54 @@ export const cloudDataService = {
     return () => unsubscribers.forEach(unsubscribe => unsubscribe());
   },
 
+  subscribePublic(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {
+    let configuration: Configuration | null = null;
+    let jobs: Job[] = [];
+    let configurationLoaded = false;
+    let jobsLoaded = false;
+    const emit = () => {
+      if (!configurationLoaded || !jobsLoaded) return;
+      onState(configuration ? {
+        ...seedState,
+        ...configuration,
+        settings: { ...seedState.settings, ...configuration.settings },
+        jobs,
+        scans: [],
+      } : null);
+    };
+    const unsubscribers = [
+      onSnapshot(publicConfigurationDocument, snapshot => {
+        configurationLoaded = true;
+        configuration = snapshot.exists() ? snapshot.data() as Configuration : null;
+        emit();
+      }, onError),
+      onSnapshot(publicJobsCollection, snapshot => {
+        jobsLoaded = true;
+        jobs = snapshot.docs.map(item => item.data() as Job);
+        emit();
+      }, onError),
+    ];
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+  },
+
   async saveInitial(state: AppState, uid: string) {
-    const writes = 1 + state.jobs.length + state.scans.length;
+    const writes = 2 + state.jobs.length * 2 + state.scans.length;
     if (writes > 490) throw new Error("This browser contains too many historical records for the one-step migration. Download an Excel backup before continuing.");
     const batch = writeBatch(db);
     batch.set(configurationDocument, { ...configurationOf(state), updatedAt: serverTimestamp(), updatedBy: uid });
+    batch.set(publicConfigurationDocument, { ...configurationOf(state), updatedAt: serverTimestamp() });
     state.jobs.forEach(job => batch.set(doc(jobsCollection, job.id), job));
+    state.jobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
     state.scans.forEach(scan => batch.set(doc(scansCollection, scan.id), scan));
+    await batch.commit();
+  },
+
+  async ensurePublicState(state: AppState) {
+    if ((await getDoc(publicConfigurationDocument)).exists()) return;
+    if (1 + state.jobs.length > 490) throw new Error("The public viewer contains too many jobs for its initial one-step publication.");
+    const batch = writeBatch(db);
+    batch.set(publicConfigurationDocument, { ...configurationOf(state), updatedAt: serverTimestamp() });
+    state.jobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
     await batch.commit();
   },
 
@@ -74,15 +121,22 @@ export const cloudDataService = {
     const promises: Promise<unknown>[] = [];
     if (changed(configurationOf(previous), configurationOf(next))) {
       promises.push(setDoc(configurationDocument, { ...configurationOf(next), updatedAt: serverTimestamp(), updatedBy: uid }));
+      promises.push(setDoc(publicConfigurationDocument, { ...configurationOf(next), updatedAt: serverTimestamp() }));
     }
 
     const previousJobs = new Map(previous.jobs.map(job => [job.id, job]));
     const nextJobs = new Map(next.jobs.map(job => [job.id, job]));
     next.jobs.forEach(job => {
-      if (changed(previousJobs.get(job.id), job)) promises.push(setDoc(doc(jobsCollection, job.id), job));
+      if (changed(previousJobs.get(job.id), job)) {
+        promises.push(setDoc(doc(jobsCollection, job.id), job));
+        promises.push(setDoc(doc(publicJobsCollection, job.id), publicJob(job)));
+      }
     });
     previous.jobs.forEach(job => {
-      if (!nextJobs.has(job.id)) promises.push(deleteDoc(doc(jobsCollection, job.id)));
+      if (!nextJobs.has(job.id)) {
+        promises.push(deleteDoc(doc(jobsCollection, job.id)));
+        promises.push(deleteDoc(doc(publicJobsCollection, job.id)));
+      }
     });
 
     const previousScans = new Map(previous.scans.map(scan => [scan.id, scan]));
