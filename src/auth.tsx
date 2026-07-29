@@ -1,16 +1,19 @@
 import { FormEvent, ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import worthHigginsLogo from "./assets/WHALogo_Horizontal.png";
 
-export type UserRole = "admin" | "manager" | "viewer";
+export type UserRole = "super_admin" | "admin" | "standard" | "manager" | "viewer";
 export type UserProfile = {
   uid: string;
   email: string;
   displayName: string;
   role: UserRole;
   enabled: boolean;
+  createdAt?: unknown;
+  lastSignInAt?: unknown;
+  removed?: boolean;
 };
 
 type AuthContextValue = {
@@ -55,8 +58,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
       if (!snapshot.exists()) throw new Error("No PlantFlow access profile exists for this account.");
       const data = snapshot.data() as Omit<UserProfile, "uid">;
       if (!data.enabled) throw new Error("This PlantFlow account has been disabled.");
-      if (!["admin", "manager", "viewer"].includes(data.role)) throw new Error("This account does not have a valid PlantFlow role.");
-      setProfile({ ...data, uid: nextUser.uid });
+      if (!["super_admin", "admin", "standard", "manager", "viewer"].includes(data.role)) throw new Error("This account does not have a valid PlantFlow role.");
+      const effectiveRole = nextUser.uid === "TOXwE0xXDlgoL4YqBbrTOGjxCyk1" ? "super_admin" : data.role;
+      setProfile({ ...data, role: effectiveRole, uid: nextUser.uid });
+      void updateDoc(doc(db, "users", nextUser.uid), { lastSignInAt: serverTimestamp() }).catch(() => undefined);
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : "PlantFlow could not load your access profile.");
       await signOut(auth);

@@ -2,7 +2,7 @@ import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCSo6YfpvHE1hFcCCwr23WLY7yYjsGldEM",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "plant-flow-7b8f6.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "plant-flow-7b8f6",

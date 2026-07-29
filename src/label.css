@@ -2690,3 +2690,226 @@ tr.deadline-overdue .status-pill.green {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.user-access-panel {
+  margin-bottom: 16px;
+  padding: 24px;
+}
+
+.user-access-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.user-access-heading h2 {
+  margin: 5px 0 5px;
+  font-size: 20px;
+}
+
+.user-access-heading>div>p:last-child,
+.user-directory-head p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.user-count {
+  min-width: 84px;
+  padding: 10px 12px;
+  border: 1px solid #d5e1dc;
+  border-radius: 9px;
+  background: #f7faf8;
+  color: #5c7068;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .45px;
+}
+
+.user-count b {
+  display: block;
+  color: #155f48;
+  font-size: 20px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.user-access-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, .78fr) minmax(500px, 1.6fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.user-invite-card {
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid #dbe5e0;
+  border-radius: 11px;
+  background: #f8faf9;
+}
+
+.access-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #eaf0ed;
+}
+
+.access-mode-tabs button {
+  min-height: 31px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #65766f;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.access-mode-tabs button.active {
+  background: #fff;
+  color: #155f48;
+  box-shadow: 0 1px 4px rgba(17,42,34,.1);
+}
+
+.user-invite-card label>span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.user-invite-card input,
+.user-invite-card select {
+  width: 100%;
+  min-height: 39px;
+  border: 1px solid #cfdad5;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff;
+  outline: none;
+}
+
+.user-invite-card input:focus,
+.user-invite-card select:focus {
+  border-color: #4c9679;
+  box-shadow: 0 0 0 3px #4c96791c;
+}
+
+.user-invite-card label small,
+.invite-explainer {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.user-invite-card .primary {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.user-directory {
+  min-width: 0;
+  border: 1px solid #dbe5e0;
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.user-directory-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e1e9e5;
+  background: #fbfcfb;
+}
+
+.user-directory-head h3 {
+  margin: 0 0 3px;
+  font-size: 13px;
+}
+
+.user-feedback {
+  position: relative;
+  margin: 12px 14px 0;
+  padding: 10px 34px 10px 11px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.user-feedback.success { background: #edf7f2; border-color: #c8e3d6; color: #216d52; }
+.user-feedback.error { background: #fff2f1; border-color: #ecc8c4; color: #a43d38; }
+.user-feedback button { position: absolute; top: 5px; right: 7px; border: 0; background: transparent; color: inherit; font-size: 16px; }
+
+.user-list { display: grid; }
+
+.user-row {
+  display: grid;
+  grid-template-columns: 34px minmax(170px,1fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 13px 15px;
+  border-bottom: 1px solid #e9efec;
+}
+
+.user-row:last-child { border-bottom: 0; }
+.user-row.removed { background: #fafafa; opacity: .72; }
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #e2f0ea;
+  color: #155f48;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.user-identity { min-width: 0; }
+.user-identity>div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.user-identity b { font-size: 11px; }
+.user-identity em { border-radius: 999px; padding: 3px 6px; background: #e7eef7; color: #38647d; font-size: 8px; font-style: normal; font-weight: 800; }
+.user-identity small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
+
+.access-state { border-radius: 999px; padding: 3px 6px; font-size: 8px; font-weight: 800; }
+.access-state.active { background: #e7f4ed; color: #247155; }
+.access-state.disabled { background: #fff1dc; color: #995d17; }
+.access-state.removed { background: #f0eeee; color: #756967; }
+
+.role-state { border-radius: 999px; padding: 3px 6px; background: #eef2f0; color: #52665e; font-size: 8px; font-weight: 800; }
+.role-state.super_admin { background: #eee9f7; color: #654b91; }
+.role-state.admin { background: #e8f1f6; color: #38697f; }
+.role-state.standard { background: #edf3f0; color: #4f695e; }
+
+.user-actions { display: flex; justify-content: flex-end; gap: 5px; flex-wrap: wrap; }
+.user-actions button { min-height: 28px; border: 1px solid #d1ddd7; border-radius: 7px; padding: 5px 8px; background: #fff; color: #406357; font-size: 8.5px; font-weight: 750; }
+.user-actions select { min-height: 28px; border: 1px solid #d1ddd7; border-radius: 7px; padding: 5px 22px 5px 7px; background: #fff; color: #406357; font-size: 8.5px; font-weight: 750; }
+.locked-role-control { min-height: 28px; display: inline-flex; align-items: center; border: 1px solid #d9d3e4; border-radius: 7px; padding: 5px 9px; background: #f4f1f8; color: #654b91; font-size: 8.5px; font-weight: 800; cursor: default; }
+.user-actions button:hover:not(:disabled) { border-color: #6b9d88; background: #f0f7f4; }
+.user-actions button:disabled { opacity: .4; cursor: not-allowed; }
+.user-actions .remove-user { color: #a04742; }
+.user-empty { padding: 28px; color: var(--muted); text-align: center; font-size: 10px; }
+
+.schedule-readonly { min-height: 42px; display: grid; align-content: center; border: 1px solid #d8e1dd; border-radius: 8px; padding: 7px 10px; background: #f3f6f4; color: #334b42; font-size: 11px; font-weight: 750; }
+.schedule-readonly small { display: block; margin-top: 2px; color: #7b8883; font-size: 8.5px; font-weight: 500; }
+
+@media(max-width:980px) {
+  .user-access-layout { grid-template-columns: 1fr; }
+}
+
+@media(max-width:650px) {
+  .user-access-panel { padding: 17px; }
+  .user-access-heading { gap: 12px; }
+  .user-row { grid-template-columns: 34px 1fr; }
+  .user-actions { grid-column: 1/-1; justify-content: flex-start; padding-left: 45px; }
+}
