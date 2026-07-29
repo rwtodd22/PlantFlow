@@ -1,0 +1,48 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasRole(roles) {
+      return signedIn()
+        && userProfile().data.enabled == true
+        && userProfile().data.role in roles;
+    }
+
+    function canView() {
+      return hasRole(['admin', 'manager', 'viewer']);
+    }
+
+    function canManageProduction() {
+      return hasRole(['admin', 'manager']);
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || hasRole(['admin']));
+      allow create, update, delete: if hasRole(['admin']);
+    }
+
+    match /configuration/{documentId} {
+      allow read: if canView();
+      allow write: if canManageProduction();
+    }
+
+    match /jobs/{jobId} {
+      allow read: if canView();
+      allow write: if canManageProduction();
+    }
+
+    match /scanEvents/{eventId} {
+      allow read: if canView();
+      allow create, update: if canManageProduction();
+      allow delete: if hasRole(['admin']);
+    }
+  }
+}
