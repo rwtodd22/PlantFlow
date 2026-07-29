@@ -32,10 +32,9 @@
 .migration-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}.migration-options button{min-height:116px;padding:17px;text-align:left}.migration-options button b,.migration-options button span{display:block}.migration-options button b{font-size:13px}.migration-options button span{margin-top:7px;font-size:10px;font-weight:500;line-height:1.45;opacity:.84}
 .viewer-signout{position:fixed;z-index:100;right:18px;bottom:18px;padding:9px 12px;border:1px solid #cbdad3;border-radius:8px;background:#fff;color:#315d4d;box-shadow:0 5px 20px rgba(17,42,34,.12);font-size:10px;font-weight:800}
 .public-viewer-message{width:min(470px,100%);padding:30px;border:1px solid #d7e2dd;border-radius:14px;background:#fff;box-shadow:0 18px 55px rgba(17,42,34,.1);text-align:center}.public-viewer-message b{font-size:19px}.public-viewer-message p{margin:9px 0 18px;color:var(--muted);font-size:12px;line-height:1.5}
-.metric>span.metric-icon{width:28px;height:28px;border-radius:7px;background:#f0f5f7;color:#5f8697}
-.metric.amber>span.metric-icon{background:#fff7e9;color:#ad7b38}
-.metric.red>span.metric-icon{background:#fff1f0;color:#b85d58}
-.metric.green>span.metric-icon{background:#eef8f3;color:#478c72}
-.metric-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;opacity:.88}
+.metric.blue strong{color:#2f6c86}
+.metric.amber strong{color:#a86a22}
+.metric.red strong{color:#b54a45}
+.metric.green strong{color:#28795d}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(max-width:760px){.auth-card{padding:28px 24px}.migration-options{grid-template-columns:1fr}.user-chip{display:none}.header-actions{gap:6px}.signout-button{padding:0 7px}}

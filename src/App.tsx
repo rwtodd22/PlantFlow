@@ -645,10 +645,10 @@ export default function Home() {
 
       {page === "dashboard" && <section>
         <div className="metrics">
-          <Metric label="Active jobs" value={activeJobs.length} sub="Across production" icon="clipboard" />
-          <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub="Needs attention" tone="amber" icon="calendar" />
-          <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub="Priority work" tone="red" icon="alert" />
-          <Metric label="Completed today" value={state.jobs.filter(j=>j.status==="Complete"&&j.updatedAt.slice(0,10)===today).length} sub="Production output" tone="green" icon="check" />
+          <Metric label="Active jobs" value={activeJobs.length} sub="Across production" />
+          <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub="Needs attention" tone="amber" />
+          <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub="Priority work" tone="red" />
+          <Metric label="Completed today" value={state.jobs.filter(j=>j.status==="Complete"&&j.updatedAt.slice(0,10)===today).length} sub="Production output" tone="green" />
         </div>
         <div className="dashboard-grid">
           <div className="panel span-2"><div className="panel-head"><div><h2>Active production</h2><p>Live location and timing for every open job</p></div><button className="text-button" onClick={()=>setPage("jobs")}>View all →</button></div><JobTable jobs={activeJobs.slice(0,6)} deptName={deptName} highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onOpen={setSelectedJob}/></div>
@@ -779,15 +779,7 @@ function PortalViewReport({groups,notes,departmentName,scope,search,sort,onClose
   </div>;
 }
 
-function Metric({label,value,sub,tone="blue",icon}:{label:string;value:number;sub:string;tone?:string;icon:"clipboard"|"calendar"|"alert"|"check"}) {
-  const paths = {
-    clipboard: <><rect x="5" y="4" width="10" height="13" rx="2"/><path d="M8 4.5V3.7A1.7 1.7 0 0 1 9.7 2h.6A1.7 1.7 0 0 1 12 3.7v.8M8 8h4M8 11h4M8 14h3"/></>,
-    calendar: <><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M6.5 2.5v4M13.5 2.5v4M3 8h14M6.5 11h2M11.5 11h2M6.5 14h2"/></>,
-    alert: <><path d="M10 2.8 18 17H2L10 2.8Z"/><path d="M10 7.2v4.5M10 14.5v.1"/></>,
-    check: <><circle cx="10" cy="10" r="7.5"/><path d="m6.4 10.1 2.3 2.4 5-5.1"/></>,
-  };
-  return <div className={`metric ${tone}`}><div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div><span className="metric-icon" aria-hidden="true"><svg viewBox="0 0 20 20">{paths[icon]}</svg></span></div>;
-}
+function Metric({label,value,sub,tone="blue"}:{label:string;value:number;sub:string;tone?:string}) { return <div className={`metric ${tone}`}><div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div></div>; }
 
 function JobTable({jobs,deptName,detailed=false,highlightDeadlines=false,showActions=true,collapsibleActions=false,onToggleActions,onPrint,onPrintPart,onOpen,onSplit,departments,statuses,onInlineUpdate,onInlinePartUpdate}:{jobs:Job[];deptName:(id:string)=>string;detailed?:boolean;highlightDeadlines?:boolean;showActions?:boolean;collapsibleActions?:boolean;onToggleActions?:()=>void;onPrint?:(job:Job)=>void;onPrintPart?:(job:Job,part:JobPart)=>void;onOpen?:(job:Job)=>void;onSplit?:(job:Job)=>void;departments?:Department[];statuses?:StatusDefinition[];onInlineUpdate?:(job:Job,field:"location"|"status"|"dueDate"|"priority",value:string)=>void;onInlinePartUpdate?:(job:Job,part:JobPart,field:"location"|"status",value:string)=>void}) {
   const actionsAvailable=Boolean(onPrint||onOpen);
