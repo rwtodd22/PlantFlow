@@ -1169,6 +1169,11 @@ tr.deadline-overdue .status-pill.green {
 .viewer-star.selected { background: #fff5df; color: #b57818; }
 .viewer-star:focus-visible { outline: 2px solid #4c9679; outline-offset: 2px; }
 @media (hover:none) { .viewer-star { opacity: .45; } .viewer-star.selected { opacity: 1; } }
+.viewer-job-row { cursor: pointer; outline: none; }
+.viewer-job-row:hover,.viewer-job-row:focus-visible { box-shadow: inset 3px 0 #81a997; }
+.viewer-note-indicator { color: #8a654e!important; font-size: 9px!important; font-weight: 800; }
+.viewer-report-button { margin-left: 10px; padding: 7px 10px; border: 1px solid #c8d8d1; border-radius: 7px; background: #fff; color: #245f4c; font-size: 10px; font-weight: 800; }
+.viewer-report-button:hover { border-color: #86aa9c; background: #f5faf7; }
 .viewer-empty { padding: 28px; color: #718079; text-align: center; }
 .viewer-footer { margin-top: 8px; padding: 22px 0 0; border-top: 1px solid #dde7e2; color: #71827a; font-size: 10px; letter-spacing: .25px; text-align: center; }
 
@@ -2391,6 +2396,53 @@ tr.deadline-overdue .status-pill.green {
   }
 }
 
+.portal-note-overlay,.portal-report-overlay { position: fixed; z-index: 3500; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(13,36,28,.68); backdrop-filter: blur(5px); }
+.portal-note-card { width: min(570px,100%); padding: 25px; border: 1px solid #d6e2dc; border-radius: 15px; background: #fff; box-shadow: 0 25px 80px rgba(0,0,0,.25); }
+.portal-note-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.portal-note-head h2 { margin: 5px 0 4px; font-size: 23px; }
+.portal-note-head span { color: #687a72; font-size: 11px; }
+.portal-note-head>button { display: grid; width: 31px; height: 31px; flex: 0 0 auto; padding: 0; place-items: center; border: 0; border-radius: 8px; background: #f1f5f3; color: #5e7068; font-size: 21px; }
+.portal-note-description { margin: 18px 0; padding: 11px 12px; border-radius: 8px; background: #f4f8f6; color: #64756e; font-size: 11px; line-height: 1.5; }
+.portal-note-card label>span { display: block; margin-bottom: 7px; color: #43584f; font-size: 10px; font-weight: 850; letter-spacing: .5px; text-transform: uppercase; }
+.portal-note-card textarea { width: 100%; padding: 12px 13px; border: 1px solid #c9d7d1; border-radius: 9px; background: #fbfcfb; color: #1b3028; line-height: 1.5; outline: none; resize: vertical; }
+.portal-note-card textarea:focus { border-color: #4c9679; box-shadow: 0 0 0 3px rgba(76,150,121,.12); }
+.portal-note-count { margin-top: 5px; color: #8a9691; font-size: 9px; text-align: right; }
+.portal-note-actions,.portal-report-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.portal-note-clear { margin-right: auto; padding: 9px 0; border: 0; background: transparent; color: #8d5b54; font-size: 10px; font-weight: 800; }
+.portal-report-modal { width: min(1120px,100%); max-height: calc(100vh - 40px); padding: 20px; overflow: auto; border-radius: 15px; background: #eef3f0; box-shadow: 0 25px 90px rgba(0,0,0,.3); }
+.portal-report-head { padding: 2px 4px 14px; }
+.portal-print-sheet { width: 100%; padding: 28px; background: #fff; color: #183027; box-shadow: 0 3px 18px rgba(19,56,43,.08); }
+.portal-print-sheet>header { display: flex; align-items: center; justify-content: space-between; gap: 25px; margin: 0 0 18px; padding: 0 0 16px; border-bottom: 2px solid #1b5d49; }
+.portal-print-sheet>header img { width: 235px; height: 58px; object-fit: contain; }
+.portal-print-sheet>header div { text-align: right; }
+.portal-print-sheet>header p { color: #86624d; font-size: 9px; font-weight: 850; letter-spacing: 1.5px; }
+.portal-print-sheet>header h1 { margin: 4px 0; font-size: 23px; }
+.portal-print-sheet>header span { color: #6a7a73; font-size: 10px; }
+.portal-print-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin-bottom: 15px; }
+.portal-print-summary>span { padding: 9px 10px; border: 1px solid #dae5e0; border-radius: 7px; background: #f7faf8; color: #6a7a73; font-size: 9px; }
+.portal-print-summary b { display: block; margin-bottom: 3px; color: #1d3e32; font-size: 12px; }
+.portal-print-filter { margin: 0 0 12px; color: #6b7c75; font-size: 10px; }
+.portal-print-group { margin-top: 15px; page-break-inside: auto; }
+.portal-print-group>h2 { display: flex; justify-content: space-between; padding: 9px 11px; background: #174f3e; color: #fff; font-size: 12px; }
+.portal-print-group>h2 span { min-width: 23px; padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.16); text-align: center; }
+.portal-print-group table { font-size: 9px; }
+.portal-print-group th { padding: 7px 8px; background: #edf3f0; color: #54665e; font-size: 7px; }
+.portal-print-group td { padding: 8px; white-space: normal; }
+.portal-print-group td small { margin-top: 2px; font-size: 8px; }
+.portal-print-note td { padding: 7px 8px; border-bottom-color: #ead9ba; background: #fff9ec; color: #5f5038; font-size: 9px; font-style: italic; }
+.portal-print-note td:first-child { width: 44px; color: #9b6d28; font-size: 7px; font-style: normal; font-weight: 850; letter-spacing: .5px; text-transform: uppercase; }
+.portal-print-sheet>footer { margin-top: 18px; padding-top: 10px; border-top: 1px solid #dce6e1; color: #77867f; font-size: 8px; text-align: center; }
+
+@media (max-width:700px) {
+  .viewer-result-note { gap: 7px; }
+  .viewer-report-button { margin: 5px 0 0; }
+  .portal-note-overlay,.portal-report-overlay { padding: 10px; }
+  .portal-print-summary { grid-template-columns: 1fr 1fr; }
+  .portal-print-sheet { padding: 18px; }
+  .portal-print-sheet>header { align-items: flex-start; flex-direction: column; }
+  .portal-print-sheet>header div { text-align: left; }
+}
+
 @media print {
   @page {
     size: auto;
@@ -2551,5 +2603,48 @@ tr.deadline-overdue .status-pill.green {
   .printing-report .report-columns {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  .printing-portal-view .viewer-header,
+  .printing-portal-view .viewer-main,
+  .printing-portal-view .portal-report-head,
+  .printing-portal-view .portal-report-actions {
+    display: none !important;
+  }
+
+  html:has(.printing-portal-view),
+  .printing-portal-view,
+  .printing-portal-view #root,
+  .printing-portal-view .viewer-portal,
+  .printing-portal-view .portal-report-overlay,
+  .printing-portal-view .portal-report-modal {
+    position: static !important;
+    display: block !important;
+    width: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .printing-portal-view .portal-print-sheet {
+    width: 7.5in !important;
+    margin: 0 !important;
+    padding: .15in !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .printing-portal-view .portal-print-group>h2,
+  .printing-portal-view .portal-print-note,
+  .printing-portal-view .portal-print-sheet>header {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
