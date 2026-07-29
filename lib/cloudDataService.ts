@@ -1,4 +1,4 @@
-import { Unsubscribe, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
+import { Unsubscribe, collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
 
@@ -10,6 +10,32 @@ const publicJobsCollection = collection(db, "publicJobs");
 
 type Configuration = Pick<AppState, "departments" | "statuses" | "settings">;
 
+/**
+ * Firestore rejects `undefined` anywhere in a document. Optional application
+ * fields (job parts and scan metadata) are represented as `undefined` in
+ * memory, so remove only those values at the cloud boundary while preserving
+ * valid empty strings, false values, arrays, and timestamps.
+ */
+function firestoreDocument<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter(item => item !== undefined)
+      .map(item => firestoreDocument(item)) as T;
+  }
+  if (
+    value
+    && typeof value === "object"
+    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+  ) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, firestoreDocument(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 function configurationOf(state: AppState): Configuration {
   return { departments: state.departments, statuses: state.statuses, settings: state.settings };
 }
@@ -19,7 +45,7 @@ function changed(left: unknown, right: unknown) {
 }
 
 function publicJob(job: Job): Job {
-  return { ...job, notes: "" };
+  return firestoreDocument({ ...job, notes: "" });
 }
 
 export const cloudDataService = {
@@ -100,11 +126,11 @@ export const cloudDataService = {
     const writes = 2 + state.jobs.length * 2 + state.scans.length;
     if (writes > 490) throw new Error("This browser contains too many historical records for the one-step migration. Download an Excel backup before continuing.");
     const batch = writeBatch(db);
-    batch.set(configurationDocument, { ...configurationOf(state), updatedAt: serverTimestamp(), updatedBy: uid });
-    batch.set(publicConfigurationDocument, { ...configurationOf(state), updatedAt: serverTimestamp() });
-    state.jobs.forEach(job => batch.set(doc(jobsCollection, job.id), job));
+    batch.set(configurationDocument, firestoreDocument({ ...configurationOf(state), updatedAt: serverTimestamp(), updatedBy: uid }));
+    batch.set(publicConfigurationDocument, firestoreDocument({ ...configurationOf(state), updatedAt: serverTimestamp() }));
+    state.jobs.forEach(job => batch.set(doc(jobsCollection, job.id), firestoreDocument(job)));
     state.jobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
-    state.scans.forEach(scan => batch.set(doc(scansCollection, scan.id), scan));
+    state.scans.forEach(scan => batch.set(doc(scansCollection, scan.id), firestoreDocument(scan)));
     await batch.commit();
   },
 
@@ -112,41 +138,52 @@ export const cloudDataService = {
     if ((await getDoc(publicConfigurationDocument)).exists()) return;
     if (1 + state.jobs.length > 490) throw new Error("The public viewer contains too many jobs for its initial one-step publication.");
     const batch = writeBatch(db);
-    batch.set(publicConfigurationDocument, { ...configurationOf(state), updatedAt: serverTimestamp() });
+    batch.set(publicConfigurationDocument, firestoreDocument({ ...configurationOf(state), updatedAt: serverTimestamp() }));
     state.jobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
     await batch.commit();
   },
 
   async saveChanges(previous: AppState, next: AppState, uid: string) {
-    const promises: Promise<unknown>[] = [];
+    const batch = writeBatch(db);
+    let writes = 0;
     if (changed(configurationOf(previous), configurationOf(next))) {
-      promises.push(setDoc(configurationDocument, { ...configurationOf(next), updatedAt: serverTimestamp(), updatedBy: uid }));
-      promises.push(setDoc(publicConfigurationDocument, { ...configurationOf(next), updatedAt: serverTimestamp() }));
+      batch.set(configurationDocument, firestoreDocument({ ...configurationOf(next), updatedAt: serverTimestamp(), updatedBy: uid }));
+      batch.set(publicConfigurationDocument, firestoreDocument({ ...configurationOf(next), updatedAt: serverTimestamp() }));
+      writes += 2;
     }
 
     const previousJobs = new Map(previous.jobs.map(job => [job.id, job]));
     const nextJobs = new Map(next.jobs.map(job => [job.id, job]));
     next.jobs.forEach(job => {
       if (changed(previousJobs.get(job.id), job)) {
-        promises.push(setDoc(doc(jobsCollection, job.id), job));
-        promises.push(setDoc(doc(publicJobsCollection, job.id), publicJob(job)));
+        batch.set(doc(jobsCollection, job.id), firestoreDocument(job));
+        batch.set(doc(publicJobsCollection, job.id), publicJob(job));
+        writes += 2;
       }
     });
     previous.jobs.forEach(job => {
       if (!nextJobs.has(job.id)) {
-        promises.push(deleteDoc(doc(jobsCollection, job.id)));
-        promises.push(deleteDoc(doc(publicJobsCollection, job.id)));
+        batch.delete(doc(jobsCollection, job.id));
+        batch.delete(doc(publicJobsCollection, job.id));
+        writes += 2;
       }
     });
 
     const previousScans = new Map(previous.scans.map(scan => [scan.id, scan]));
     const nextScans = new Map(next.scans.map(scan => [scan.id, scan]));
     next.scans.forEach(scan => {
-      if (changed(previousScans.get(scan.id), scan)) promises.push(setDoc(doc(scansCollection, scan.id), scan));
+      if (changed(previousScans.get(scan.id), scan)) {
+        batch.set(doc(scansCollection, scan.id), firestoreDocument(scan));
+        writes += 1;
+      }
     });
     previous.scans.forEach(scan => {
-      if (!nextScans.has(scan.id)) promises.push(deleteDoc(doc(scansCollection, scan.id)));
+      if (!nextScans.has(scan.id)) {
+        batch.delete(doc(scansCollection, scan.id));
+        writes += 1;
+      }
     });
-    await Promise.all(promises);
+    if (writes > 490) throw new Error("This update is too large to synchronize safely in one operation. Download a backup and contact the PlantFlow administrator.");
+    if (writes) await batch.commit();
   },
 };
