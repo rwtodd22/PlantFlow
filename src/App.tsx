@@ -242,6 +242,7 @@ export default function Home() {
   const [statusPrint, setStatusPrint] = useState<StatusDefinition[] | null>(null);
   const [managementReport, setManagementReport] = useState<ReportType | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [viewerPortal] = useState(() => new URLSearchParams(window.location.search).get("view") === "portal");
   const scanBuffer = useRef("");
   const lastKeyAt = useRef(0);
   const titleBeforePrint = useRef("");
@@ -383,6 +384,7 @@ export default function Home() {
   }, [state, persist, pendingStatuses]);
 
   useEffect(() => {
+    if (viewerPortal) return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editable = target?.matches("input, textarea, select, [contenteditable='true']");
@@ -406,7 +408,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [processScan]);
+  }, [processScan, viewerPortal]);
 
   const departments = state.departments;
   const statuses = state.statuses;
@@ -549,6 +551,8 @@ export default function Home() {
     return next;
   });
 
+  if (viewerPortal) return <ReadOnlyPortal state={state}/>;
+
   return <div className={`app-shell ${sidebarCollapsed?"sidebar-collapsed":""}`}>
     <aside className="sidebar">
       <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed?"Expand navigation":"Collapse navigation"} title={sidebarCollapsed?"Expand menu":"Collapse menu"}>{sidebarCollapsed?"›":"‹"}</button>
@@ -593,7 +597,7 @@ export default function Home() {
 
       {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>Every scan is timestamped and retained.</p></div><span className="count-pill">{state.scans.length} events</span></div><div className="history-list">{state.scans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div></section>}
 
-      {page === "admin" && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/><Admin departments={departments} statuses={statuses} deadlineHighlighting={state.settings.deadlineHighlighting} onToggleDeadlineHighlighting={(enabled)=>persist({...state,settings:{...state.settings,deadlineHighlighting:enabled}})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();setState(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
+      {page === "admin" && <><ViewerPortalAdminCard/><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/><Admin departments={departments} statuses={statuses} deadlineHighlighting={state.settings.deadlineHighlighting} onToggleDeadlineHighlighting={(enabled)=>persist({...state,settings:{...state.settings,deadlineHighlighting:enabled}})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();setState(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
     {printPart && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber} · {printPart.job.customer}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div></OverlayPortal>}
@@ -601,6 +605,47 @@ export default function Home() {
     {splitJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/></OverlayPortal>}
     {statusPrint && <StatusPrintSheet statuses={statusPrint} onClose={()=>setStatusPrint(null)} onPrint={printStatusBarcodes}/>} 
     {managementReport && <ManagementReport type={managementReport} state={state} onClose={()=>setManagementReport(null)} onPrint={printManagementReport}/>} 
+  </div>;
+}
+
+function ReadOnlyPortal({state}:{state:typeof seedState}) {
+  const [search,setSearch]=useState("");
+  const [scope,setScope]=useState<"active"|"all">("active");
+  const [group,setGroup]=useState<"none"|"department"|"customer"|"status"|"priority">("none");
+  const [sort,setSort]=useState<"due"|"recent"|"job"|"customer"|"priority">("due");
+  const departmentName=(id:string)=>state.departments.find(item=>item.id===id)?.name||"Not started";
+  const active=state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
+  const visibleJobs=useMemo(()=>{
+    const source=scope==="active"?active:state.jobs;
+    const filtered=source.filter(job=>`${job.jobNumber} ${job.customer} ${job.description} ${parentLocation(job,departmentName)} ${parentStatus(job)}`.toLowerCase().includes(search.trim().toLowerCase()));
+    const priorityRank={Critical:0,Rush:1,Standard:2};
+    return [...filtered].sort((a,b)=>{
+      if(sort==="recent") return parentUpdatedAt(b).localeCompare(parentUpdatedAt(a));
+      if(sort==="job") return a.jobNumber.localeCompare(b.jobNumber,undefined,{numeric:true});
+      if(sort==="customer") return a.customer.localeCompare(b.customer)||a.dueDate.localeCompare(b.dueDate);
+      if(sort==="priority") return priorityRank[a.priority]-priorityRank[b.priority]||a.dueDate.localeCompare(b.dueDate);
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+  },[state.jobs,state.statuses,scope,search,sort]);
+  const groups=useMemo(()=>{
+    if(group==="none") return [{key:"all",label:scope==="active"?"All active jobs":"All job records",jobs:visibleJobs}];
+    const buckets=new Map<string,Job[]>();
+    visibleJobs.forEach(job=>{
+      const key=group==="department"?parentLocation(job,departmentName):group==="customer"?job.customer:group==="status"?parentStatus(job):job.priority;
+      buckets.set(key,[...(buckets.get(key)||[]),job]);
+    });
+    return [...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([key,jobs])=>({key,label:key,jobs}));
+  },[group,visibleJobs,scope,state.departments]);
+  const today=localDateValue();
+  return <div className="viewer-portal">
+    <header className="viewer-header"><div className="viewer-brand"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><p className="eyebrow">PLANTFLOW · READ-ONLY PORTAL</p><h1>Production Job Viewer</h1><span>Review current production information without editing access.</span></div></div><div className="viewer-updated"><i/><div><b>Viewer mode</b><span>Last opened {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span></div></div></header>
+    <main className="viewer-main">
+      <section className="viewer-metrics"><div><span>Active jobs</span><b>{active.length}</b></div><div><span>Due today</span><b>{active.filter(job=>job.dueDate===today).length}</b></div><div><span>Overdue</span><b>{active.filter(job=>job.dueDate<today).length}</b></div><div><span>Rush / critical</span><b>{active.filter(job=>job.priority!=="Standard").length}</b></div></section>
+      <section className="viewer-controls panel"><label className="viewer-search"><span>Find a job</span><input placeholder="Search job, customer, description, department…" value={search} onChange={event=>setSearch(event.target.value)}/></label><label><span>Records</span><select value={scope} onChange={event=>setScope(event.target.value as typeof scope)}><option value="active">Active jobs</option><option value="all">All records</option></select></label><label><span>View</span><select value={group} onChange={event=>setGroup(event.target.value as typeof group)}><option value="none">Overall view</option><option value="department">Group by department</option><option value="customer">Group by customer</option><option value="status">Group by status</option><option value="priority">Group by priority</option></select></label><label><span>Sort</span><select value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="due">Due date — soonest</option><option value="recent">Most recently moved</option><option value="priority">Priority — critical first</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></section>
+      <div className="viewer-result-note"><b>{visibleJobs.length}</b> matching {visibleJobs.length===1?"job":"jobs"}<span>Read-only · no production records can be changed here</span></div>
+      <section className="viewer-groups">{groups.map(bucket=><article className="panel viewer-group" key={bucket.key}><div className="viewer-group-head"><div><h2>{bucket.label}</h2><p>{bucket.jobs.length} {bucket.jobs.length===1?"job":"jobs"}</p></div></div><div className="viewer-table-wrap"><table className="viewer-table"><thead><tr><th>Job</th><th>Customer / Description</th><th>Department</th><th>Status</th><th>Priority</th><th>Due</th><th>Time here</th></tr></thead><tbody>{bucket.jobs.map(job=><Fragment key={job.id}><tr className={deadlineTone(job.dueDate,state.settings.deadlineHighlighting)}><td><strong>{job.jobNumber}</strong>{job.parts?.length&&<small>{job.parts.length} tracked parts</small>}</td><td><b>{job.customer}</b><small>{job.description}</small></td><td><span className="department-pill">{parentLocation(job,departmentName)}</span></td><td><span className={`status-pill ${statusTone[parentStatus(job)]||"slate"}`}>{parentStatus(job)}</span></td><td><span className={`priority-text ${job.priority.toLowerCase()}`}>{job.priority}</span></td><td>{formatDate(job.dueDate)}</td><td>{timeAgo(parentUpdatedAt(job))}</td></tr>{job.parts?.map(part=><tr className="viewer-part-row" key={part.id}><td><strong>{part.code}</strong></td><td><b>{part.name}</b><small>{part.description||job.description}{part.quantity?` · Qty ${part.quantity}`:""}</small></td><td><span className="department-pill">{departmentName(part.currentDepartmentId)}</span></td><td><span className={`status-pill ${statusTone[part.status]||"slate"}`}>{part.status}</span></td><td><span className="priority-text">Part</span></td><td>{formatDate(job.dueDate)}</td><td>{timeAgo(part.updatedAt)}</td></tr>)}</Fragment>)}</tbody></table>{!bucket.jobs.length&&<p className="viewer-empty">No jobs match the current view.</p>}</div></article>)}</section>
+      <footer className="viewer-footer">PlantFlow read-only viewer · Worth Higgins & Associates</footer>
+    </main>
   </div>;
 }
 
@@ -642,6 +687,29 @@ function JobEditor({job,departments,statuses,onClose,onSave,onPrint}:{job:Job;de
 }
 
 function StatusPrintSheet({statuses,onClose,onPrint}:{statuses:StatusDefinition[];onClose:()=>void;onPrint:()=>void}) { return <div className="status-sheet-overlay" role="dialog" aria-modal="true"><div className="status-sheet-modal"><div className="reprint-head"><div><p className="eyebrow">LAMINATED STATION COMMANDS</p><h2>Status barcode sheet</h2></div><button onClick={onClose}>×</button></div><div className="status-print-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><h1>PRODUCTION STATUS COMMANDS</h1><p>Scan a status first, then scan one job within 15 seconds.</p><div className="status-label-grid">{statuses.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(status=><div className="status-label" key={status.id} style={{borderTopColor:status.color}}><strong>{status.name}</strong><Code128 value={`STATUS:${status.code}`}/><small>STATUS:{status.code}</small></div>)}</div></div><div className="reprint-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={onPrint}>Print Status Barcodes</button></div></div></div> }
+
+function ViewerPortalAdminCard() {
+  const [copied,setCopied]=useState(false);
+  const portalUrl=`${window.location.origin}${window.location.pathname}?view=portal`;
+  const copyLink=async()=>{
+    try {
+      if(navigator.clipboard?.writeText) await navigator.clipboard.writeText(portalUrl);
+      else {
+        const input=document.createElement("textarea");
+        input.value=portalUrl;
+        input.style.position="fixed";
+        input.style.opacity="0";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      setCopied(true);
+      window.setTimeout(()=>setCopied(false),2000);
+    } catch { setCopied(false); }
+  };
+  return <section className="panel viewer-admin-card"><div className="viewer-admin-icon" aria-hidden="true"><span>◉</span></div><div className="viewer-admin-copy"><p className="eyebrow">READ-ONLY ACCESS</p><h2>Sales & Project Management Viewer</h2><p>A clean viewing portal with search, sorting, and views grouped by department, customer, status, or priority. It contains no edit, scanner, barcode, or administration controls.</p><div className="viewer-link-row"><input aria-label="Read-only portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer">Open viewer ↗</a></div><div className="viewer-local-warning"><b>Local pilot limitation</b><span>The portal is ready, but live sharing between different computers requires the upcoming shared database connection. Until then, each browser displays its own locally stored PlantFlow data.</span></div></div></section>;
+}
 
 function ReportsBackupPanel({onReport,onBackup}:{onReport:(type:ReportType)=>void;onBackup:()=>void}) {
   return <section className="panel reports-backup"><div className="panel-head"><div><h2>Management reports</h2><p>Generate compact, shareable production summaries for daily meetings and management review.</p></div></div><div className="report-cards featured-report"><button className="daily-card" onClick={()=>onReport("daily")}><span>★</span><div><b>Daily Production Brief</b><small>A meeting-ready overview of today, the coming week, department workload, priority jobs, and management talking points.</small></div><em>Featured PDF →</em></button></div><div className="supporting-reports"><div className="report-section-heading"><h3>Supporting reports</h3><p>Use these when you need a closer look at a particular part of production.</p></div><div className="report-cards"><button onClick={()=>onReport("snapshot")}><span>01</span><div><b>Executive Snapshot</b><small>Active workload, priorities, due-date risk, departments, and statuses.</small></div><em>PDF →</em></button><button onClick={()=>onReport("workload")}><span>02</span><div><b>Department Workload</b><small>Job counts, average current dwell time, and the longest-waiting job by department.</small></div><em>PDF →</em></button><button onClick={()=>onReport("risks")}><span>03</span><div><b>Risks & Exceptions</b><small>Overdue, due soon, on hold, waiting for materials, rework, rush, and critical jobs.</small></div><em>PDF →</em></button></div></div><p className="report-note">PDF buttons open a print-ready report. Choose “Save as PDF” in the print window for a small file suitable for email or management sharing.</p><div className="backup-zone"><div className="backup-zone-heading"><div><p className="eyebrow">DATA PROTECTION</p><h3>Emergency backup</h3><small>This download is a complete operational backup, separate from the management reports above.</small></div><span>Complete sortable job list</span></div><div className="report-cards backup-grid"><button className="backup-card" onClick={onBackup}><span>↓</span><div><b>Download Emergency Excel Backup</b><small>Opens directly to every job in a sortable, filterable Excel table; complete backup fields and supporting records are included.</small></div><em>Download .XLSX →</em></button></div></div></section>;
