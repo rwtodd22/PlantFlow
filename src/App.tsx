@@ -4,7 +4,9 @@ import { FormEvent, Fragment, ReactNode, useCallback, useEffect, useMemo, useRef
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
 import { dataService, Department, Job, JobPart, ScanEvent, seedState, StatusDefinition } from "../lib/dataService";
+import { cloudDataService } from "../lib/cloudDataService";
 import { parseScannerInput } from "../lib/scanner";
+import { usePlantFlowAuth } from "./auth";
 import worthHigginsLogo from "./assets/WHALogo_Horizontal.png";
 import whaWhiteLogo from "./assets/WHA_White.png";
 
@@ -220,6 +222,9 @@ function OverlayPortal({children,target}:{children:ReactNode;target:HTMLElement|
 }
 
 export default function Home() {
+  const { user, profile, logout } = usePlantFlowAuth();
+  const canEdit = profile.role === "admin" || profile.role === "manager";
+  const isAdmin = profile.role === "admin";
   const [page, setPage] = useState<Page>("dashboard");
   const [state, setState] = useState(seedState);
   const [notice, setNotice] = useState<Notice>(null);
@@ -243,17 +248,54 @@ export default function Home() {
   const [managementReport, setManagementReport] = useState<ReportType | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewerPortal] = useState(() => new URLSearchParams(window.location.search).get("view") === "portal");
+  const [cloudStatus, setCloudStatus] = useState<"loading" | "ready" | "offline">("loading");
+  const [cloudError, setCloudError] = useState("");
+  const [migrationRequired, setMigrationRequired] = useState(false);
   const scanBuffer = useRef("");
   const lastKeyAt = useRef(0);
   const titleBeforePrint = useRef("");
   const activeJobsRef = useRef<HTMLElement>(null);
+  const cloudReady = useRef(false);
+  const pendingCloudState = useRef<typeof state | null>(null);
 
   useEffect(() => {
-    // Hydrate the device-local pilot data after the client mounts.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState(dataService.load());
+    const localState = dataService.load();
+    setState(localState);
     setSidebarCollapsed(window.localStorage.getItem("plantflow-sidebar-collapsed") === "true");
-  }, []);
+    const unsubscribe = cloudDataService.subscribe(remoteState => {
+      if (!remoteState) {
+        cloudReady.current = false;
+        setMigrationRequired(canEdit);
+        setCloudStatus("ready");
+        return;
+      }
+      if (pendingCloudState.current && canEdit) {
+        const queuedState = pendingCloudState.current;
+        pendingCloudState.current = null;
+        cloudReady.current = true;
+        setCloudStatus("ready");
+        setCloudError("");
+        void cloudDataService.saveChanges(remoteState, queuedState, user.uid).catch(error => {
+          pendingCloudState.current = queuedState;
+          cloudReady.current = false;
+          setCloudStatus("offline");
+          setCloudError(error instanceof Error ? error.message : "Queued changes could not be synchronized.");
+        });
+        return;
+      }
+      cloudReady.current = true;
+      setMigrationRequired(false);
+      setCloudStatus("ready");
+      setCloudError("");
+      setState(remoteState);
+      dataService.save(remoteState);
+    }, error => {
+      cloudReady.current = false;
+      setCloudStatus("offline");
+      setCloudError(error.message || "The shared database is temporarily unavailable.");
+    });
+    return unsubscribe;
+  }, [canEdit, user.uid]);
   useEffect(() => {
     const finishPrinting = () => {
       document.body.classList.remove("printing-label");
@@ -277,7 +319,36 @@ export default function Home() {
       document.removeEventListener("webkitfullscreenchange", syncFullscreenState);
     };
   }, []);
-  const persist = useCallback((next: typeof state) => { setState(next); dataService.save(next); }, []);
+  const persist = useCallback((next: typeof state) => {
+    setState(next);
+    dataService.save(next);
+    if (canEdit && cloudReady.current) {
+      void cloudDataService.saveChanges(state, next, user.uid).catch(error => {
+        pendingCloudState.current = next;
+        cloudReady.current = false;
+        setCloudStatus("offline");
+        setCloudError(error instanceof Error ? error.message : "The shared update could not be saved.");
+      });
+    } else if (canEdit) {
+      pendingCloudState.current = next;
+    }
+  }, [canEdit, state, user.uid]);
+
+  const initializeSharedData = async (source: "local" | "sample") => {
+    const next = source === "local" ? dataService.load() : structuredClone(seedState);
+    try {
+      await cloudDataService.saveInitial(next, user.uid);
+      dataService.save(next);
+      setState(next);
+      cloudReady.current = true;
+      setMigrationRequired(false);
+      setCloudStatus("ready");
+      setNotice({kind:"success",title:"Shared PlantFlow data created",detail:source === "local" ? "This device’s jobs are now the shared starting point." : "A fresh shared sample workspace is ready."});
+    } catch (error) {
+      setCloudStatus("offline");
+      setCloudError(error instanceof Error ? error.message : "PlantFlow could not create the shared workspace.");
+    }
+  };
 
   const toggleActiveJobsFullscreen = async () => {
     try {
@@ -384,7 +455,7 @@ export default function Home() {
   }, [state, persist, pendingStatuses]);
 
   useEffect(() => {
-    if (viewerPortal) return;
+    if (viewerPortal || !canEdit) return;
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editable = target?.matches("input, textarea, select, [contenteditable='true']");
@@ -408,7 +479,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [processScan, viewerPortal]);
+  }, [processScan, viewerPortal, canEdit]);
 
   const departments = state.departments;
   const statuses = state.statuses;
@@ -551,17 +622,22 @@ export default function Home() {
     return next;
   });
 
-  if (viewerPortal) return <ReadOnlyPortal state={state}/>;
+  if (cloudStatus === "loading") return <div className="auth-screen"><div className="auth-loading"><span className="auth-spinner"/><b>Loading shared production data…</b><small>Connecting to PlantFlow Cloud</small></div></div>;
+
+  if (viewerPortal || profile.role === "viewer") return <><ReadOnlyPortal state={state}/><button className="viewer-signout" type="button" onClick={()=>void logout()}>Sign out</button></>;
+
+  const availableNav = isAdmin ? nav : nav.filter(item => item.id !== "admin");
 
   return <div className={`app-shell ${sidebarCollapsed?"sidebar-collapsed":""}`}>
     <aside className="sidebar">
       <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed?"Expand navigation":"Collapse navigation"} title={sidebarCollapsed?"Expand menu":"Collapse menu"}>{sidebarCollapsed?"›":"‹"}</button>
       <div className="brand company-brand"><img className="full-brand-logo" src={worthHigginsLogo} alt="Worth Higgins & Associates" /><img className="compact-brand-logo" src={whaWhiteLogo} alt="WHA"/><div className="product-name"><strong>PlantFlow</strong><small>Production tracking</small></div></div>
-      <nav>{nav.map(item => <button key={item.id} className={page===item.id?"active":""} onClick={()=>setPage(item.id)} title={sidebarCollapsed?item.label:undefined} aria-label={item.label}><span>{item.icon}</span><b>{item.label}</b></button>)}</nav>
-      <div className="system-card"><span className="live-dot"/><div><strong>Scanner listener active</strong><small>Waiting for HID input</small></div></div>
+      <nav>{availableNav.map(item => <button key={item.id} className={page===item.id?"active":""} onClick={()=>setPage(item.id)} title={sidebarCollapsed?item.label:undefined} aria-label={item.label}><span>{item.icon}</span><b>{item.label}</b></button>)}</nav>
+      <div className="system-card"><span className={`live-dot ${cloudStatus==="offline"?"offline":""}`}/><div><strong>{cloudStatus==="offline"?"Cloud connection interrupted":"PlantFlow Cloud connected"}</strong><small>{cloudStatus==="offline"?"Changes remain on this device":"Scanner listener active"}</small></div></div>
     </aside>
     <main>
-      <header><div><p className="eyebrow">SHOP FLOOR CONTROL</p><h1>{nav.find(n=>n.id===page)?.label}</h1></div><div className="header-actions"><span className="date-chip">{new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</span><button type="button" className="primary small" onClick={()=>setPage("create")}>+ New job</button></div></header>
+      <header><div><p className="eyebrow">SHOP FLOOR CONTROL</p><h1>{nav.find(n=>n.id===page)?.label}</h1></div><div className="header-actions"><div className="user-chip"><b>{profile.displayName || profile.email}</b><span>{profile.role}</span></div><span className="date-chip">{new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</span><button type="button" className="primary small" onClick={()=>setPage("create")}>+ New job</button><button type="button" className="signout-button" onClick={()=>void logout()}>Sign out</button></div></header>
+      {cloudStatus === "offline" && <div className="cloud-warning"><b>Cloud connection interrupted</b><span>PlantFlow is showing the last data saved on this device. New changes are queued and will synchronize when the connection returns.</span>{cloudError&&<small>{cloudError}</small>}</div>}
       {notice && <div className={`notice ${notice.kind}`}><span>{notice.kind==="success"?"✓":notice.kind==="duplicate"?"↺":"!"}</span><div><strong>{notice.title}</strong><small>{notice.detail}</small></div><button onClick={()=>setNotice(null)}>×</button></div>}
 
       {page === "dashboard" && <section>
@@ -597,7 +673,7 @@ export default function Home() {
 
       {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>Every scan is timestamped and retained.</p></div><span className="count-pill">{state.scans.length} events</span></div><div className="history-list">{state.scans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div></section>}
 
-      {page === "admin" && <><ViewerPortalAdminCard/><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/><Admin departments={departments} statuses={statuses} deadlineHighlighting={state.settings.deadlineHighlighting} onToggleDeadlineHighlighting={(enabled)=>persist({...state,settings:{...state.settings,deadlineHighlighting:enabled}})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();setState(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
+      {page === "admin" && isAdmin && <><ViewerPortalAdminCard/><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/><Admin departments={departments} statuses={statuses} deadlineHighlighting={state.settings.deadlineHighlighting} onToggleDeadlineHighlighting={(enabled)=>persist({...state,settings:{...state.settings,deadlineHighlighting:enabled}})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();persist(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
     {printPart && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber} · {printPart.job.customer}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div></OverlayPortal>}
@@ -605,6 +681,7 @@ export default function Home() {
     {splitJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/></OverlayPortal>}
     {statusPrint && <StatusPrintSheet statuses={statusPrint} onClose={()=>setStatusPrint(null)} onPrint={printStatusBarcodes}/>} 
     {managementReport && <ManagementReport type={managementReport} state={state} onClose={()=>setManagementReport(null)} onPrint={printManagementReport}/>} 
+    {migrationRequired && <div className="migration-overlay" role="dialog" aria-modal="true" aria-label="Initialize shared PlantFlow data"><div className="migration-card"><p className="eyebrow">ONE-TIME CLOUD SETUP</p><h2>Choose the shared starting data</h2><p>No shared PlantFlow records exist yet. Nothing will be uploaded until you choose an option.</p><div className="migration-options"><button className="primary" onClick={()=>void initializeSharedData("local")}><b>Use this device’s PlantFlow data</b><span>Uploads the jobs, history, departments, and statuses currently shown here.</span></button><button className="secondary" onClick={()=>void initializeSharedData("sample")}><b>Start with fresh sample data</b><span>Creates a clean shared pilot using the placeholder jobs and departments.</span></button></div><small>Recommended: use this device’s data if it contains the PlantFlow records you want to keep.</small></div></div>}
   </div>;
 }
 
@@ -708,7 +785,7 @@ function ViewerPortalAdminCard() {
       window.setTimeout(()=>setCopied(false),2000);
     } catch { setCopied(false); }
   };
-  return <section className="panel viewer-admin-card"><div className="viewer-admin-icon" aria-hidden="true"><span>◉</span></div><div className="viewer-admin-copy"><p className="eyebrow">READ-ONLY ACCESS</p><h2>Sales & Project Management Viewer</h2><p>A clean viewing portal with search, sorting, and views grouped by department, customer, status, or priority. It contains no edit, scanner, barcode, or administration controls.</p><div className="viewer-link-row"><input aria-label="Read-only portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer">Open viewer ↗</a></div><div className="viewer-local-warning"><b>Local pilot limitation</b><span>The portal is ready, but live sharing between different computers requires the upcoming shared database connection. Until then, each browser displays its own locally stored PlantFlow data.</span></div></div></section>;
+  return <section className="panel viewer-admin-card"><div className="viewer-admin-icon" aria-hidden="true"><span>◉</span></div><div className="viewer-admin-copy"><p className="eyebrow">READ-ONLY ACCESS</p><h2>Sales & Project Management Viewer</h2><p>A clean viewing portal with search, sorting, and views grouped by department, customer, status, or priority. It contains no edit, scanner, barcode, or administration controls.</p><div className="viewer-link-row"><input aria-label="Read-only portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer">Open viewer ↗</a></div><div className="viewer-local-warning"><b>Secure shared access</b><span>People opening this link must sign in with an enabled PlantFlow account. Viewer accounts receive read-only access to the same live production data.</span></div></div></section>;
 }
 
 function ReportsBackupPanel({onReport,onBackup}:{onReport:(type:ReportType)=>void;onBackup:()=>void}) {
@@ -726,7 +803,7 @@ function ManagementReport({type,state,onClose,onPrint}:{type:ReportType;state:ty
   const statusRows=state.statuses.map(status=>({name:status.name,count:active.filter(job=>job.status===status.name).length})).filter(row=>row.count>0);
   const title=type==="snapshot"?"Executive Production Snapshot":type==="workload"?"Department Workload & Dwell Time":"Production Risks & Exceptions";
   const duration=(minutes:number)=>minutes<60?`${minutes} min`:`${Math.floor(minutes/60)}h ${minutes%60}m`;
-  return <div className="report-overlay" role="dialog" aria-modal="true"><div className="report-modal"><div className="reprint-head"><div><p className="eyebrow">MANAGEMENT REPORT</p><h2>{title}</h2></div><button onClick={onClose}>×</button></div><article className="management-report"><header><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><h1>{title}</h1><p>PlantFlow · Generated {new Date().toLocaleString()}</p></div></header>{type==="snapshot"&&<><div className="report-metrics"><span><b>{active.length}</b>Active jobs</span><span><b>{overdue.length}</b>Overdue</span><span><b>{dueSoon.length}</b>Due within 2 days</span><span><b>{active.filter(job=>job.priority!=="Standard").length}</b>Rush / critical</span></div><div className="report-columns"><ReportTable title="Jobs by department" headers={["Department","Jobs","Share"]} rows={departmentRows.map(row=>[row.name,row.count,`${active.length?Math.round(row.count/active.length*100):0}%`])}/><ReportTable title="Jobs by status" headers={["Status","Jobs","Share"]} rows={statusRows.map(row=>[row.name,row.count,`${active.length?Math.round(row.count/active.length*100):0}%`])}/></div></>}{type==="workload"&&<ReportTable title="Current department workload" headers={["Department","Active jobs","Average time here","Longest time here"]} rows={departmentRows.map(row=>[row.name,row.count,duration(row.average),duration(row.longest)])}/>} {type==="risks"&&<ReportTable title={`${risks.length} jobs requiring attention`} headers={["Job","Customer","Department","Status","Priority","Due"]} rows={risks.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),job.status,job.priority,formatDate(job.dueDate)])}/>}<footer>Internal production report · Source: PlantFlow device-local data</footer></article><div className="reprint-actions"><button className="secondary" onClick={onClose}>Close</button><button className="primary" onClick={onPrint}>Print / Save as PDF</button></div></div></div>;
+  return <div className="report-overlay" role="dialog" aria-modal="true"><div className="report-modal"><div className="reprint-head"><div><p className="eyebrow">MANAGEMENT REPORT</p><h2>{title}</h2></div><button onClick={onClose}>×</button></div><article className="management-report"><header><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><h1>{title}</h1><p>PlantFlow · Generated {new Date().toLocaleString()}</p></div></header>{type==="snapshot"&&<><div className="report-metrics"><span><b>{active.length}</b>Active jobs</span><span><b>{overdue.length}</b>Overdue</span><span><b>{dueSoon.length}</b>Due within 2 days</span><span><b>{active.filter(job=>job.priority!=="Standard").length}</b>Rush / critical</span></div><div className="report-columns"><ReportTable title="Jobs by department" headers={["Department","Jobs","Share"]} rows={departmentRows.map(row=>[row.name,row.count,`${active.length?Math.round(row.count/active.length*100):0}%`])}/><ReportTable title="Jobs by status" headers={["Status","Jobs","Share"]} rows={statusRows.map(row=>[row.name,row.count,`${active.length?Math.round(row.count/active.length*100):0}%`])}/></div></>}{type==="workload"&&<ReportTable title="Current department workload" headers={["Department","Active jobs","Average time here","Longest time here"]} rows={departmentRows.map(row=>[row.name,row.count,duration(row.average),duration(row.longest)])}/>} {type==="risks"&&<ReportTable title={`${risks.length} jobs requiring attention`} headers={["Job","Customer","Department","Status","Priority","Due"]} rows={risks.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),job.status,job.priority,formatDate(job.dueDate)])}/>}<footer>Internal production report · Source: shared PlantFlow data</footer></article><div className="reprint-actions"><button className="secondary" onClick={onClose}>Close</button><button className="primary" onClick={onPrint}>Print / Save as PDF</button></div></div></div>;
 }
 
 function DailyBriefReport({state,onClose,onPrint}:{state:typeof seedState;onClose:()=>void;onPrint:()=>void}) {
@@ -753,7 +830,7 @@ function DailyBriefReport({state,onClose,onPrint}:{state:typeof seedState;onClos
     job.dueDate<today?"report-overdue":job.dueDate===today?"report-due-today":"",
     job.priority==="Critical"?"report-critical":job.priority==="Rush"?"report-rush":"",
   ].filter(Boolean).join(" ");
-  return <div className="report-overlay" role="dialog" aria-modal="true"><div className="report-modal daily-report-modal"><div className="reprint-head"><div><p className="eyebrow">MANAGEMENT REPORT</p><h2>Daily Production Brief</h2></div><button onClick={onClose}>×</button></div><article className="management-report daily-brief"><header><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><h1>Daily Production Brief</h1><p className="brief-report-date">{reportDate}</p><p>Generated {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</p></div></header><div className="report-metrics five"><span><b>{active.length}</b>Active</span><span className={dueToday.length?"metric-warning":""}><b>{dueToday.length}</b>Due today</span><span className={overdue.length?"metric-danger":""}><b>{overdue.length}</b>Overdue</span><span><b>{dueThisWeek.length}</b>Due in 7 days</span><span className="metric-success"><b>{completedToday}</b>Completed today</span></div><section className="brief-talking-points"><h3>Production manager talking points</h3><ul>{talkingPoints.map(point=><li key={point}>{point}</li>)}</ul></section>{actionBlocked.length>0&&<ReportTable title="Action needed this morning" headers={["Job","Customer","Department","Current issue"]} rows={actionBlocked.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),job.status])}/>}<ReportTable title={`${attention.length} priority jobs requiring discussion`} headers={["Job","Customer","Department","Status","Priority","Due"]} rows={attentionJobs.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),job.status,job.priority,formatDate(job.dueDate)])} rowClassName={(_,index)=>jobTone(attentionJobs[index])}/><div className="report-columns brief-columns"><ReportTable title="Department workload" headers={["Department","Jobs","Avg. time here","Longest"]} rows={departmentRows.map(row=>[row.name,row.count,duration(row.average),duration(row.longest)])}/><ReportTable title="Seven-day due outlook" headers={["Due","Job","Customer","Priority"]} rows={outlookJobs.map(job=>[formatDate(job.dueDate),job.jobNumber,job.customer,job.priority])} rowClassName={(_,index)=>jobTone(outlookJobs[index])}/></div>{onHold.length>0&&<div className="on-hold-section"><ReportTable title={`${onHold.length} on-hold ${onHold.length===1?"job":"jobs"} — monitoring only`} headers={["Job","Customer","Department","Due","Time on hold"]} rows={onHold.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),formatDate(job.dueDate),timeAgo(job.updatedAt)])}/></div>}<footer>Internal production report · Source: PlantFlow device-local data</footer></article><div className="reprint-actions"><button className="secondary" onClick={onClose}>Close</button><button className="primary" onClick={onPrint}>Print / Save as PDF</button></div></div></div>;
+  return <div className="report-overlay" role="dialog" aria-modal="true"><div className="report-modal daily-report-modal"><div className="reprint-head"><div><p className="eyebrow">MANAGEMENT REPORT</p><h2>Daily Production Brief</h2></div><button onClick={onClose}>×</button></div><article className="management-report daily-brief"><header><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><h1>Daily Production Brief</h1><p className="brief-report-date">{reportDate}</p><p>Generated {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</p></div></header><div className="report-metrics five"><span><b>{active.length}</b>Active</span><span className={dueToday.length?"metric-warning":""}><b>{dueToday.length}</b>Due today</span><span className={overdue.length?"metric-danger":""}><b>{overdue.length}</b>Overdue</span><span><b>{dueThisWeek.length}</b>Due in 7 days</span><span className="metric-success"><b>{completedToday}</b>Completed today</span></div><section className="brief-talking-points"><h3>Production manager talking points</h3><ul>{talkingPoints.map(point=><li key={point}>{point}</li>)}</ul></section>{actionBlocked.length>0&&<ReportTable title="Action needed this morning" headers={["Job","Customer","Department","Current issue"]} rows={actionBlocked.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),job.status])}/>}<ReportTable title={`${attention.length} priority jobs requiring discussion`} headers={["Job","Customer","Department","Status","Priority","Due"]} rows={attentionJobs.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),job.status,job.priority,formatDate(job.dueDate)])} rowClassName={(_,index)=>jobTone(attentionJobs[index])}/><div className="report-columns brief-columns"><ReportTable title="Department workload" headers={["Department","Jobs","Avg. time here","Longest"]} rows={departmentRows.map(row=>[row.name,row.count,duration(row.average),duration(row.longest)])}/><ReportTable title="Seven-day due outlook" headers={["Due","Job","Customer","Priority"]} rows={outlookJobs.map(job=>[formatDate(job.dueDate),job.jobNumber,job.customer,job.priority])} rowClassName={(_,index)=>jobTone(outlookJobs[index])}/></div>{onHold.length>0&&<div className="on-hold-section"><ReportTable title={`${onHold.length} on-hold ${onHold.length===1?"job":"jobs"} — monitoring only`} headers={["Job","Customer","Department","Due","Time on hold"]} rows={onHold.map(job=>[job.jobNumber,job.customer,departmentName(job.currentDepartmentId),formatDate(job.dueDate),timeAgo(job.updatedAt)])}/></div>}<footer>Internal production report · Source: shared PlantFlow data</footer></article><div className="reprint-actions"><button className="secondary" onClick={onClose}>Close</button><button className="primary" onClick={onPrint}>Print / Save as PDF</button></div></div></div>;
 }
 
 function ReportTable({title,headers,rows,rowClassName}:{title:string;headers:string[];rows:(string|number)[][];rowClassName?:(row:(string|number)[],index:number)=>string}) { return <section className="report-table"><h3>{title}</h3><table><thead><tr>{headers.map(header=><th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={index} className={rowClassName?.(row,index)||""}>{row.map((cell,cellIndex)=><td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>{!rows.length&&<p>No matching records.</p>}</section> }
