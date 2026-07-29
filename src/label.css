@@ -278,7 +278,7 @@ td small,
 
 .job-controls {
   display: grid;
-  grid-template-columns: minmax(230px, 1.15fr) minmax(190px, 0.9fr) minmax(230px, 1fr);
+  grid-template-columns: minmax(220px, 1.15fr) minmax(165px, .75fr) minmax(165px, .75fr) minmax(210px, 1fr);
   align-items: flex-end;
   gap: 14px;
   width: 100%;
@@ -335,7 +335,7 @@ td small,
 
 @media (min-width: 761px) and (max-width: 1350px) {
   .job-controls {
-    grid-template-columns: minmax(230px, 1.1fr) minmax(180px, 0.9fr) minmax(220px, 1fr);
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
   }
 }
 
@@ -1138,7 +1138,7 @@ tr.deadline-overdue .status-pill.green {
 .viewer-metrics > div:nth-child(4)::before { background: #a77e66; }
 .viewer-metrics span { color: #6d7b76; font-size: 11px; font-weight: 700; }
 .viewer-metrics b { color: #17372d; font-size: 25px; }
-.viewer-controls { display: grid; grid-template-columns: minmax(270px,1.4fr) repeat(3,minmax(165px,.7fr)); gap: 12px; align-items: end; padding: 17px 18px; border-color: #d6e2dc; box-shadow: 0 4px 18px rgba(19,56,43,.04); }
+.viewer-controls { display: grid; grid-template-columns: minmax(250px,1.35fr) repeat(4,minmax(145px,.7fr)); gap: 12px; align-items: end; padding: 17px 18px; border-color: #d6e2dc; box-shadow: 0 4px 18px rgba(19,56,43,.04); }
 .viewer-controls label > span { display: block; margin: 0 0 6px 2px; color: #60716a; font-size: 9px; font-weight: 850; letter-spacing: .65px; text-transform: uppercase; }
 .viewer-controls input,.viewer-controls select { width: 100%; min-width: 0; height: 39px; padding: 0 11px; border: 1px solid #cad8d2; border-radius: 8px; background: #fbfcfb; color: #1b3028; outline: none; }
 .viewer-controls input:focus,.viewer-controls select:focus { border-color: #4c9679; box-shadow: 0 0 0 3px rgba(76,150,121,.12); }
@@ -2164,6 +2164,22 @@ tr.deadline-overdue .status-pill.green {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.01em;
+}
+
+.job-form .form-grid > label > span small {
+  margin-left: 6px;
+  color: #819089;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.job-form .field-help {
+  margin-top: 6px;
+  color: #74847d;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .job-form .form-grid input,

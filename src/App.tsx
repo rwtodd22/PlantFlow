@@ -75,6 +75,15 @@ function parentLocation(job: Job, deptName: (id: string) => string) {
   return locations.length === 1 ? deptName(locations[0]) : "Multiple locations";
 }
 
+function jobIsInDepartment(job: Job, departmentId: string) {
+  if (!departmentId) return true;
+  const parts = job.parts || [];
+  if (departmentId === "__not_started__") {
+    return parts.length ? parts.some(part => !part.currentDepartmentId) : !job.currentDepartmentId;
+  }
+  return parts.length ? parts.some(part => part.currentDepartmentId === departmentId) : job.currentDepartmentId === departmentId;
+}
+
 function parentStatus(job: Job) {
   const parts = job.parts || [];
   if (!parts.length) return job.status;
@@ -243,6 +252,7 @@ export default function Home() {
   const [splitJob, setSplitJob] = useState<Job | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "location" | "customer">("none");
   const [sortBy, setSortBy] = useState<"recent" | "due" | "priority" | "time" | "job" | "customer">("recent");
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [jobControlsOpen, setJobControlsOpen] = useState(false);
   const [jobActionsOpen, setJobActionsOpen] = useState(false);
   const [jobsFullscreen, setJobsFullscreen] = useState(false);
@@ -491,7 +501,7 @@ export default function Home() {
   const statuses = state.statuses;
   const deptName = (id: string) => departments.find(d => d.id === id)?.name || "Not started";
   const activeJobs = state.jobs.filter(job => !jobIsClosed(job,statuses));
-  const filteredJobs = activeJobs.filter(j => `${j.jobNumber} ${j.customer} ${j.description}`.toLowerCase().includes(query.toLowerCase()));
+  const filteredJobs = activeJobs.filter(j => jobIsInDepartment(j,departmentFilter) && `${j.jobNumber} ${j.customer} ${j.description}`.toLowerCase().includes(query.toLowerCase()));
   const organizedJobs = useMemo(() => {
     const priorityRank = { Critical: 0, Rush: 1, Standard: 2 };
     return [...filteredJobs].sort((a,b) => {
@@ -504,7 +514,7 @@ export default function Home() {
     });
   }, [filteredJobs, sortBy]);
   const jobGroups = useMemo(() => {
-    if (groupBy === "none") return [{ key: "all", label: "All active jobs", jobs: organizedJobs }];
+    if (groupBy === "none") return [{ key: "all", label: departmentFilter ? `${departmentFilter === "__not_started__" ? "Not started" : deptName(departmentFilter)} jobs` : "All active jobs", jobs: organizedJobs }];
     const grouped = new Map<string, Job[]>();
     organizedJobs.forEach(job => {
       const partLocations = [...new Set((job.parts || []).map(part=>part.currentDepartmentId))];
@@ -512,7 +522,7 @@ export default function Home() {
       grouped.set(key, [...(grouped.get(key) || []), job]);
     });
     return [...grouped.entries()].map(([key,jobs]) => ({ key, label: groupBy === "location" ? (key === "multiple-locations" ? "Multiple locations" : deptName(key === "not-started" ? "" : key)) : key, jobs }));
-  }, [groupBy, organizedJobs, departments]);
+  }, [groupBy, organizedJobs, departments, departmentFilter]);
   const today = new Date().toISOString().slice(0,10);
 
   const saveStatuses = (nextStatuses: StatusDefinition[]) => {
@@ -608,12 +618,15 @@ export default function Home() {
     if (state.jobs.some(j => j.jobNumber === jobNumber)) { setNotice({ kind: "error", title: "Duplicate job number", detail: `${jobNumber} already exists.` }); return; }
     const now = new Date().toISOString();
     const route = departments.filter(d => d.enabled && form.get(`route-${d.id}`)).map(d => d.id);
-    const initialStatus=statuses.find(item=>item.code==="READY")?.name||"Ready for Production";
-    const parts: JobPart[]|undefined=createAsSplit?createParts.map((part,index)=>({id:makeId(),code:`${jobNumber}-${String.fromCharCode(65+index)}`,name:part.name.trim()||`Part ${String.fromCharCode(65+index)}`,description:part.description.trim(),quantity:part.quantity.trim(),currentDepartmentId:"",status:initialStatus,updatedAt:now})):undefined;
+    const initialDepartmentId=String(form.get("initialDepartmentId")||"");
+    const initialStatus=initialDepartmentId
+      ? statuses.find(item=>item.code==="IN_PRODUCTION")?.name||"In Production"
+      : statuses.find(item=>item.code==="READY")?.name||"Ready for Production";
+    const parts: JobPart[]|undefined=createAsSplit?createParts.map((part,index)=>({id:makeId(),code:`${jobNumber}-${String.fromCharCode(65+index)}`,name:part.name.trim()||`Part ${String.fromCharCode(65+index)}`,description:part.description.trim(),quantity:part.quantity.trim(),currentDepartmentId:initialDepartmentId,status:initialStatus,updatedAt:now})):undefined;
     const existingCodes=new Set(state.jobs.flatMap(item=>[item.jobNumber.toUpperCase(),...(item.parts||[]).map(part=>part.code.toUpperCase())]));
     const conflict=parts?.find(part=>existingCodes.has(part.code.toUpperCase()));
     if(conflict){setNotice({kind:"error",title:"Part barcode already exists",detail:`${conflict.code} is already assigned to another job or part.`});return;}
-    const job: Job = { id: makeId(), jobNumber, customer: String(form.get("customer")), description: String(form.get("description")), dueDate: String(form.get("dueDate")), priority: String(form.get("priority")) as Job["priority"], status: initialStatus, currentDepartmentId: "", route, notes: String(form.get("notes")), createdAt: now, updatedAt: now, parts };
+    const job: Job = { id: makeId(), jobNumber, customer: String(form.get("customer")), description: String(form.get("description")), dueDate: String(form.get("dueDate")), priority: String(form.get("priority")) as Job["priority"], status: initialStatus, currentDepartmentId: initialDepartmentId, route, notes: String(form.get("notes")), createdAt: now, updatedAt: now, parts };
     persist({ ...state, jobs: [job, ...state.jobs] });
     setLabelJobNumber("");
     setJobNumberInput("");
@@ -663,7 +676,7 @@ export default function Home() {
 
       {page === "create" && <section className="create-grid">
         <form className="panel job-form" onSubmit={createJob}><div className="panel-head"><div><h2>Create a production job</h2><p>Enter the job details and choose its expected route.</p></div></div>
-          <div className="form-grid"><label><span>PACE job number *</span><input name="jobNumber" required placeholder="e.g. 590042" value={jobNumberInput} onChange={event=>{const value=event.target.value.toUpperCase();setJobNumberInput(value);setLabelJobNumber(value)}} /></label><label><span>Customer *</span><input name="customer" required placeholder="Customer name" /></label><label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or description" /></label><label><span>Production due date *</span><CalendarDatePicker name="dueDate" value={jobDueDate} min={localDateValue()} onChange={setJobDueDate}/></label><label><span>Priority</span><select name="priority" defaultValue="Standard"><option>Standard</option><option>Rush</option><option>Critical</option></select></label><label className="wide"><span>Production notes</span><textarea name="notes" rows={3} placeholder="Materials, finishing notes, or special handling" /></label></div>
+          <div className="form-grid"><label><span>PACE job number *</span><input name="jobNumber" required placeholder="e.g. 590042" value={jobNumberInput} onChange={event=>{const value=event.target.value.toUpperCase();setJobNumberInput(value);setLabelJobNumber(value)}} /></label><label><span>Customer *</span><input name="customer" required placeholder="Customer name" /></label><label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or description" /></label><label><span>Production due date *</span><CalendarDatePicker name="dueDate" value={jobDueDate} min={localDateValue()} onChange={setJobDueDate}/></label><label><span>Priority</span><select name="priority" defaultValue="Standard"><option>Standard</option><option>Rush</option><option>Critical</option></select></label><label className="wide"><span>Starting location <small>Optional</small></span><select name="initialDepartmentId" defaultValue=""><option value="">Not started</option>{departments.filter(department=>department.enabled).map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select><small className="field-help">Leave this as Not started unless the job is already in a production department.</small></label><label className="wide"><span>Production notes</span><textarea name="notes" rows={3} placeholder="Materials, finishing notes, or special handling" /></label></div>
           <fieldset><legend>Expected production route</legend><p>Select the departments this job is expected to visit. This list is editable later.</p><div className="route-options">{departments.filter(d=>d.enabled).map(d=><label key={d.id}><input type="checkbox" name={`route-${d.id}`} defaultChecked/><span className="route-num">{d.order}</span><div><b>{d.name}</b><small>{d.prefix}|</small></div></label>)}</div></fieldset>
           <fieldset className={`create-split-section ${createAsSplit?"open":""}`}><div className="create-split-toggle"><div><h3>Does this job need separate tracked parts?</h3><p>Most jobs should remain off. Turn this on only when physical portions will move independently.</p></div><label className="switch" aria-label="Create this as a split job"><input type="checkbox" checked={createAsSplit} onChange={event=>setCreateAsSplit(event.target.checked)}/><span/></label></div>{createAsSplit&&<><div className="create-part-list">{createParts.map((part,index)=><div className="create-part-row" key={index}><span className="create-part-code">{jobNumberInput||"JOB"}-{String.fromCharCode(65+index)}</span><label><span>Part name *</span><input required value={part.name} onChange={event=>setCreateParts(current=>current.map((item,itemIndex)=>itemIndex===index?{...item,name:event.target.value}:item))}/></label><label><span>Description</span><input value={part.description} placeholder="What belongs with this part?" onChange={event=>setCreateParts(current=>current.map((item,itemIndex)=>itemIndex===index?{...item,description:event.target.value}:item))}/></label><label><span>Quantity</span><input value={part.quantity} placeholder="Optional" onChange={event=>setCreateParts(current=>current.map((item,itemIndex)=>itemIndex===index?{...item,quantity:event.target.value}:item))}/></label>{createParts.length>2&&<button type="button" aria-label={`Remove ${part.name}`} onClick={()=>setCreateParts(current=>current.filter((_,itemIndex)=>itemIndex!==index))}>×</button>}</div>)}</div><button type="button" className="add-create-part" onClick={()=>setCreateParts(current=>current.length>=26?current:[...current,{name:`Part ${String.fromCharCode(65+current.length)}`,description:"",quantity:""}])}>+ Add another part</button></>}</fieldset>
           <div className="form-actions"><button type="reset" className="secondary" onClick={()=>{setJobNumberInput("");setLabelJobNumber("");setJobDueDate(localDateValue(3));setCreateAsSplit(false);setCreateParts([{name:"Part A",description:"",quantity:""},{name:"Part B",description:"",quantity:""}])}}>Clear form</button><button type="submit" className="primary">Create job</button></div>
@@ -674,7 +687,7 @@ export default function Home() {
       {page === "jobs" && <section className="jobs-workspace" ref={activeJobsRef}>
         {jobGroups.map((group,index)=><section className={`panel job-group ${index===0&&jobControlsOpen?"controls-open":""}`} key={group.key}>
           <div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div>{index===0&&<div className="jobs-toolbar-actions"><button type="button" className="fullscreen-toggle" onClick={toggleActiveJobsFullscreen}>{jobsFullscreen?<svg className="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3v5H3M12 17v-5h5M3 8l5-5M17 12l-5 5"/></svg>:<svg className="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3H3v4M13 3h4v4M17 13v4h-4M7 17H3v-4"/></svg>}<span>{jobsFullscreen?"Exit full screen":"Full screen"}</span></button><button type="button" className="controls-toggle" aria-expanded={jobControlsOpen} aria-controls="active-job-controls" onClick={()=>setJobControlsOpen(open=>!open)}><span>{jobControlsOpen?"Hide controls":"Search, organize & sort"}</span><svg className="toolbar-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></div>}</div>
-          {index===0&&jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}
+          {index===0&&jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Department</span><select value={departmentFilter} onChange={e=>setDepartmentFilter(e.target.value)}><option value="">All departments</option><option value="__not_started__">Not started</option>{departments.filter(department=>department.enabled).map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}
           <JobTable jobs={group.jobs} deptName={deptName} detailed highlightDeadlines={state.settings.deadlineHighlighting} showActions={jobActionsOpen} collapsibleActions onToggleActions={()=>setJobActionsOpen(open=>!open)} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onOpen={setSelectedJob} onSplit={setSplitJob} departments={departments} statuses={statuses} allowDateEditing={canChangeSchedule} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/>
         </section>)}
       </section>}
@@ -697,7 +710,8 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
   const [search,setSearch]=useState("");
   const [scope,setScope]=useState<"active"|"starred"|"all">("active");
   const [group,setGroup]=useState<"none"|"department"|"customer"|"status"|"priority">("none");
-  const [sort,setSort]=useState<"due"|"recent"|"job"|"customer"|"priority">("due");
+  const [sort,setSort]=useState<"due"|"recent"|"job"|"customer"|"priority">("recent");
+  const [departmentFilter,setDepartmentFilter]=useState("");
   const [starredJobs,setStarredJobs]=useState<string[]>(()=>{try{return JSON.parse(window.localStorage.getItem("plantflow-portal-starred-v1")||"[]")}catch{return []}});
   const [jobNotes,setJobNotes]=useState<Record<string,string>>(()=>{try{return JSON.parse(window.localStorage.getItem("plantflow-portal-notes-v1")||"{}")}catch{return {}}});
   const [noteJob,setNoteJob]=useState<Job|null>(null);
@@ -708,7 +722,7 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
   const active=state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
   const visibleJobs=useMemo(()=>{
     const source=scope==="active"?active:scope==="starred"?state.jobs.filter(job=>starredJobs.includes(job.id)):state.jobs;
-    const filtered=source.filter(job=>`${job.jobNumber} ${job.customer} ${job.description} ${parentLocation(job,departmentName)} ${parentStatus(job)}`.toLowerCase().includes(search.trim().toLowerCase()));
+    const filtered=source.filter(job=>jobIsInDepartment(job,departmentFilter)&&`${job.jobNumber} ${job.customer} ${job.description} ${parentLocation(job,departmentName)} ${parentStatus(job)}`.toLowerCase().includes(search.trim().toLowerCase()));
     const priorityRank={Critical:0,Rush:1,Standard:2};
     return [...filtered].sort((a,b)=>{
       if(sort==="recent") return parentUpdatedAt(b).localeCompare(parentUpdatedAt(a));
@@ -717,22 +731,22 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
       if(sort==="priority") return priorityRank[a.priority]-priorityRank[b.priority]||a.dueDate.localeCompare(b.dueDate);
       return a.dueDate.localeCompare(b.dueDate);
     });
-  },[state.jobs,state.statuses,scope,search,sort,starredJobs]);
+  },[state.jobs,state.statuses,scope,search,sort,starredJobs,departmentFilter]);
   const groups=useMemo(()=>{
-    if(group==="none") return [{key:"all",label:scope==="active"?"All active jobs":scope==="starred"?"Starred jobs":"All job records",jobs:visibleJobs}];
+    if(group==="none") return [{key:"all",label:departmentFilter?`${departmentFilter==="__not_started__"?"Not started":departmentName(departmentFilter)} jobs`:scope==="active"?"All active jobs":scope==="starred"?"Starred jobs":"All job records",jobs:visibleJobs}];
     const buckets=new Map<string,Job[]>();
     visibleJobs.forEach(job=>{
       const key=group==="department"?parentLocation(job,departmentName):group==="customer"?job.customer:group==="status"?parentStatus(job):job.priority;
       buckets.set(key,[...(buckets.get(key)||[]),job]);
     });
     return [...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([key,jobs])=>({key,label:key,jobs}));
-  },[group,visibleJobs,scope,state.departments]);
+  },[group,visibleJobs,scope,state.departments,departmentFilter]);
   const today=localDateValue();
   return <div className="viewer-portal">
     <header className="viewer-header"><div className="viewer-brand"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><p className="eyebrow">PLANTFLOW PORTAL</p><h1>Production Information Portal</h1><span>Review current production information and follow jobs as they move through the plant.</span></div></div><div className="viewer-updated"><i/><div><b>Live production view</b><span>Updated {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span></div></div></header>
     <main className="viewer-main">
       <section className="viewer-metrics"><div><span>Active jobs</span><b>{active.length}</b></div><div><span>Due today</span><b>{active.filter(job=>job.dueDate===today).length}</b></div><div><span>Overdue</span><b>{active.filter(job=>job.dueDate<today).length}</b></div><div><span>Rush / critical</span><b>{active.filter(job=>job.priority!=="Standard").length}</b></div></section>
-      <section className="viewer-controls panel"><label className="viewer-search"><span>Find a job</span><input placeholder="Search job, customer, description, department…" value={search} onChange={event=>setSearch(event.target.value)}/></label><label><span>Records</span><select value={scope} onChange={event=>setScope(event.target.value as typeof scope)}><option value="active">Active jobs</option><option value="starred">★ Starred jobs ({starredJobs.length})</option><option value="all">All records</option></select></label><label><span>View</span><select value={group} onChange={event=>setGroup(event.target.value as typeof group)}><option value="none">Overall view</option><option value="department">Group by department</option><option value="customer">Group by customer</option><option value="status">Group by status</option><option value="priority">Group by priority</option></select></label><label><span>Sort</span><select value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="due">Due date — soonest</option><option value="recent">Most recently moved</option><option value="priority">Priority — critical first</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></section>
+      <section className="viewer-controls panel"><label className="viewer-search"><span>Find a job</span><input placeholder="Search job, customer, description, department…" value={search} onChange={event=>setSearch(event.target.value)}/></label><label><span>Records</span><select value={scope} onChange={event=>setScope(event.target.value as typeof scope)}><option value="active">Active jobs</option><option value="starred">★ Starred jobs ({starredJobs.length})</option><option value="all">All records</option></select></label><label><span>Department</span><select value={departmentFilter} onChange={event=>setDepartmentFilter(event.target.value)}><option value="">All departments</option><option value="__not_started__">Not started</option>{state.departments.filter(department=>department.enabled).map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label><span>View</span><select value={group} onChange={event=>setGroup(event.target.value as typeof group)}><option value="none">Overall view</option><option value="department">Group by department</option><option value="customer">Group by customer</option><option value="status">Group by status</option><option value="priority">Group by priority</option></select></label><label><span>Sort</span><select value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="due">Due date — soonest</option><option value="recent">Most recently moved</option><option value="priority">Priority — critical first</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></section>
       <div className="viewer-result-note"><b>{visibleJobs.length}</b> matching {visibleJobs.length===1?"job":"jobs"}<span>Current production view · updated in real time</span><button type="button" className="viewer-report-button" onClick={()=>setPortalReportOpen(true)}>Print / PDF current view</button></div>
       <section className="viewer-groups">{groups.map(bucket=><article className="panel viewer-group" key={bucket.key}><div className="viewer-group-head"><div><h2>{bucket.label}</h2><p>{bucket.jobs.length} {bucket.jobs.length===1?"job":"jobs"}</p></div></div><div className="viewer-table-wrap"><table className="viewer-table"><thead><tr><th className="viewer-star-column"><span className="sr-only">Favorite</span></th><th>Job</th><th>Customer / Description</th><th>Department</th><th>Status</th><th>Priority</th><th>Due</th><th>Time here</th></tr></thead><tbody>{bucket.jobs.map(job=><Fragment key={job.id}><tr className={`viewer-job-row ${deadlineTone(job.dueDate,state.settings.deadlineHighlighting)}`} tabIndex={0} onClick={()=>setNoteJob(job)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setNoteJob(job)}}}><td className="viewer-star-column"><button type="button" className={`viewer-star ${starredJobs.includes(job.id)?"selected":""}`} aria-label={starredJobs.includes(job.id)?`Remove job ${job.jobNumber} from starred jobs`:`Star job ${job.jobNumber}`} title={starredJobs.includes(job.id)?"Remove star":"Star this job"} onClick={event=>{event.stopPropagation();toggleStar(job.id)}}>★</button></td><td><strong>{job.jobNumber}</strong>{jobNotes[job.id]&&<small className="viewer-note-indicator">● Note</small>}{job.parts?.length&&<small>{job.parts.length} tracked parts</small>}</td><td><b>{job.customer}</b><small>{job.description}</small></td><td><span className="department-pill">{parentLocation(job,departmentName)}</span></td><td><span className={`status-pill ${statusTone[parentStatus(job)]||"slate"}`}>{parentStatus(job)}</span></td><td><span className={`priority-text ${job.priority.toLowerCase()}`}>{job.priority}</span></td><td>{formatDate(job.dueDate)}</td><td>{timeAgo(parentUpdatedAt(job))}</td></tr>{job.parts?.map(part=><tr className="viewer-part-row" key={part.id} onClick={()=>setNoteJob(job)}><td className="viewer-star-column"/><td><strong>{part.code}</strong></td><td><b>{part.name}</b><small>{part.description||job.description}{part.quantity?` · Qty ${part.quantity}`:""}</small></td><td><span className="department-pill">{departmentName(part.currentDepartmentId)}</span></td><td><span className={`status-pill ${statusTone[part.status]||"slate"}`}>{part.status}</span></td><td><span className="priority-text">Part</span></td><td>{formatDate(job.dueDate)}</td><td>{timeAgo(part.updatedAt)}</td></tr>)}</Fragment>)}</tbody></table>{!bucket.jobs.length&&<p className="viewer-empty">{scope==="starred"?"No starred jobs yet. Select the star beside a job to add it here.":"No jobs match the current view."}</p>}</div></article>)}</section>
       <footer className="viewer-footer">PlantFlow Production Portal · Worth Higgins & Associates</footer>
