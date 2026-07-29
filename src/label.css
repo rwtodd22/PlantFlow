@@ -2913,3 +2913,20 @@ tr.deadline-overdue .status-pill.green {
   .user-row { grid-template-columns: 34px 1fr; }
   .user-actions { grid-column: 1/-1; justify-content: flex-start; padding-left: 45px; }
 }
+.viewer-link-row a.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.viewer-open-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
