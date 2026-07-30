@@ -1,9 +1,10 @@
 export type Department = { id:string; name:string; prefix:string; enabled:boolean; order:number };
 export type StatusDefinition = { id:string; name:string; code:string; enabled:boolean; order:number; color:string; closesJob:boolean };
 export type JobPart = { id:string; code:string; name:string; description:string; quantity:string; currentDepartmentId:string; status:string; updatedAt:string };
-export type Job = { id:string; jobNumber:string; customer:string; description:string; dueDate:string; priority:"Standard"|"Rush"|"Critical"; status:string; currentDepartmentId:string; route:string[]; notes:string; createdAt:string; updatedAt:string; overtime?:boolean; parts?:JobPart[] };
+export type BillingState = "awaiting" | "approved" | "hold";
+export type Job = { id:string; jobNumber:string; customer:string; description:string; dueDate:string; priority:"Standard"|"Rush"|"Critical"; status:string; currentDepartmentId:string; route:string[]; notes:string; createdAt:string; updatedAt:string; overtime?:boolean; parts?:JobPart[]; completedAt?:string; billingState?:BillingState; billingNote?:string; billingApprovedAt?:string; billingClearedAt?:string };
 export type ScanEvent = { id:string; jobNumber:string; departmentId:string; departmentName:string; previousDepartmentId:string; timestamp:string; type:"Normal"|"Route exception"|"Manual"|"Status command"; statusName?:string; partId?:string; partCode?:string; partName?:string };
-export type AppSettings = { deadlineHighlighting:boolean; timeDisplayMode:"days"|"hours" };
+export type AppSettings = { deadlineHighlighting:boolean; timeDisplayMode:"days"|"hours"; billingAutoDeleteApproved30Days:boolean };
 export type AppState = { departments:Department[]; statuses:StatusDefinition[]; settings:AppSettings; jobs:Job[]; scans:ScanEvent[] };
 
 const now = Date.now();
@@ -11,7 +12,7 @@ const iso = (minutesAgo:number) => new Date(now-minutesAgo*60000).toISOString();
 const date = (days:number) => new Date(now+days*86400000).toISOString().slice(0,10);
 
 export const seedState: AppState = {
-  settings:{deadlineHighlighting:true,timeDisplayMode:"days"},
+  settings:{deadlineHighlighting:true,timeDisplayMode:"days",billingAutoDeleteApproved30Days:true},
   departments:[
     {id:"prepress",name:"Prepress",prefix:"PREPRESS",enabled:true,order:1},{id:"print",name:"Printing",prefix:"PRINT",enabled:true,order:2},{id:"lam",name:"Lamination",prefix:"LAM",enabled:true,order:3},{id:"route",name:"Routing",prefix:"ROUTE",enabled:true,order:4},{id:"paint",name:"Painting",prefix:"PAINT",enabled:true,order:5},{id:"finish",name:"Finishing",prefix:"FINISH",enabled:true,order:6},{id:"assembly",name:"Assembly",prefix:"ASSEMBLY",enabled:true,order:7},{id:"pack",name:"Packaging",prefix:"PACK",enabled:true,order:8},{id:"ship",name:"Shipping",prefix:"SHIP",enabled:true,order:9}
   ],

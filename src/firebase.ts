@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { Firestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCSo6YfpvHE1hFcCCwr23WLY7yYjsGldEM",
@@ -20,4 +20,11 @@ if (!firebaseConfigured) {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Persist queued reads and writes across refreshes, browser restarts, and brief
+// network interruptions. Multi-tab coordination prevents a second PlantFlow
+// tab from disabling the offline cache on the same workstation.
+const firebaseRuntime = globalThis as typeof globalThis & { __plantFlowFirestore?: Firestore };
+export const db = firebaseRuntime.__plantFlowFirestore || initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+firebaseRuntime.__plantFlowFirestore = db;

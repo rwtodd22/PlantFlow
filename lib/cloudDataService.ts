@@ -1,4 +1,4 @@
-import { Unsubscribe, collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from "firebase/firestore";
+import { Unsubscribe, collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
 
@@ -7,6 +7,8 @@ const jobsCollection = collection(db, "jobs");
 const scansCollection = collection(db, "scanEvents");
 const publicConfigurationDocument = doc(db, "publicConfiguration", "plantflow");
 const publicJobsCollection = collection(db, "publicJobs");
+const LIVE_SCAN_LIMIT = 300;
+const HISTORY_PAGE_SIZE = 250;
 
 type Configuration = Pick<AppState, "departments" | "statuses" | "settings">;
 
@@ -45,7 +47,20 @@ function changed(left: unknown, right: unknown) {
 }
 
 function publicJob(job: Job): Job {
-  return firestoreDocument({ ...job, notes: "" });
+  return firestoreDocument({
+    ...job,
+    notes: "",
+    billingState: undefined,
+    billingNote: undefined,
+    billingApprovedAt: undefined,
+    billingClearedAt: undefined,
+  });
+}
+
+function isClosed(job: Job, state: AppState) {
+  const parts = job.parts || [];
+  if (parts.length) return parts.every(part => state.statuses.find(status => status.name === part.status)?.closesJob);
+  return Boolean(state.statuses.find(status => status.name === job.status)?.closesJob);
 }
 
 export const cloudDataService = {
@@ -83,13 +98,26 @@ export const cloudDataService = {
         jobs = snapshot.docs.map(item => item.data() as Job);
         emit();
       }, onError),
-      onSnapshot(scansCollection, snapshot => {
+      onSnapshot(query(scansCollection, orderBy("timestamp", "desc"), limit(LIVE_SCAN_LIMIT)), snapshot => {
         scansLoaded = true;
         scans = snapshot.docs.map(item => item.data() as ScanEvent);
         emit();
       }, onError),
     ];
     return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+  },
+
+  async loadOlderScans(beforeTimestamp: string, pageSize = HISTORY_PAGE_SIZE) {
+    const snapshot = await getDocs(query(
+      scansCollection,
+      orderBy("timestamp", "desc"),
+      startAfter(beforeTimestamp),
+      limit(pageSize),
+    ));
+    return {
+      scans: snapshot.docs.map(item => item.data() as ScanEvent),
+      hasMore: snapshot.size === pageSize,
+    };
   },
 
   subscribePublic(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {
@@ -129,17 +157,18 @@ export const cloudDataService = {
     batch.set(configurationDocument, firestoreDocument({ ...configurationOf(state), updatedAt: serverTimestamp(), updatedBy: uid }));
     batch.set(publicConfigurationDocument, firestoreDocument({ ...configurationOf(state), updatedAt: serverTimestamp() }));
     state.jobs.forEach(job => batch.set(doc(jobsCollection, job.id), firestoreDocument(job)));
-    state.jobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
+    state.jobs.filter(job => !isClosed(job, state)).forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
     state.scans.forEach(scan => batch.set(doc(scansCollection, scan.id), firestoreDocument(scan)));
     await batch.commit();
   },
 
   async ensurePublicState(state: AppState) {
     if ((await getDoc(publicConfigurationDocument)).exists()) return;
-    if (1 + state.jobs.length > 490) throw new Error("The public viewer contains too many jobs for its initial one-step publication.");
+    const activeJobs = state.jobs.filter(job => !isClosed(job, state));
+    if (1 + activeJobs.length > 490) throw new Error("The public viewer contains too many jobs for its initial one-step publication.");
     const batch = writeBatch(db);
     batch.set(publicConfigurationDocument, firestoreDocument({ ...configurationOf(state), updatedAt: serverTimestamp() }));
-    state.jobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
+    activeJobs.forEach(job => batch.set(doc(publicJobsCollection, job.id), publicJob(job)));
     await batch.commit();
   },
 
@@ -157,7 +186,8 @@ export const cloudDataService = {
     next.jobs.forEach(job => {
       if (changed(previousJobs.get(job.id), job)) {
         batch.set(doc(jobsCollection, job.id), firestoreDocument(job));
-        batch.set(doc(publicJobsCollection, job.id), publicJob(job));
+        if (isClosed(job, next)) batch.delete(doc(publicJobsCollection, job.id));
+        else batch.set(doc(publicJobsCollection, job.id), publicJob(job));
         writes += 2;
       }
     });

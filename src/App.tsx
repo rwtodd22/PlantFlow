@@ -149,6 +149,42 @@ function jobIsClosed(job: Job, statuses: StatusDefinition[]) {
   return Boolean(statuses.find(status => status.name === job.status)?.closesJob);
 }
 
+function jobIsComplete(job: Job, statuses: StatusDefinition[]) {
+  const completeNames = new Set(statuses.filter(status => status.code === "COMPLETE").map(status => status.name));
+  const parts = job.parts || [];
+  if (parts.length) return parts.every(part => completeNames.has(part.status));
+  return completeNames.has(job.status);
+}
+
+function jobIsCanceled(job: Job, statuses: StatusDefinition[]) {
+  const canceledNames = new Set(statuses.filter(status => status.code === "CANCELED").map(status => status.name));
+  const parts = job.parts || [];
+  if (parts.length) return parts.every(part => canceledNames.has(part.status));
+  return canceledNames.has(job.status);
+}
+
+function withCompletionMetadata(previousState: typeof seedState, nextState: typeof seedState) {
+  const previousJobs = new Map(previousState.jobs.map(job => [job.id, job]));
+  return {
+    ...nextState,
+    jobs: nextState.jobs.map(job => {
+      const previous = previousJobs.get(job.id);
+      const complete = jobIsComplete(job, nextState.statuses);
+      const wasComplete = previous ? jobIsComplete(previous, previousState.statuses) : false;
+      if (complete) {
+        return {
+          ...job,
+          completedAt: job.completedAt || previous?.completedAt || (wasComplete ? previous?.updatedAt : job.updatedAt),
+        };
+      }
+      if (wasComplete || job.completedAt || job.billingState || job.billingNote || job.billingApprovedAt || job.billingClearedAt) {
+        return { ...job, completedAt: undefined, billingState: undefined, billingNote: undefined, billingApprovedAt: undefined, billingClearedAt: undefined };
+      }
+      return job;
+    }),
+  };
+}
+
 function parentLocation(job: Job, deptName: (id: string) => string) {
   const parts = job.parts || [];
   if (!parts.length) return deptName(job.currentDepartmentId);
@@ -221,13 +257,15 @@ async function downloadExcelBackup(state: typeof seedState) {
     return sheet;
   };
 
-  const jobsSheet=addSheet("All Jobs",["Job Number","Customer","Description","Current Department","Status","Priority","Due Date","Overtime","Created","Last Updated","Production Route","Notes","Record ID","Department ID","Route Department IDs"],state.jobs.map(job=>[job.jobNumber,job.customer,job.description,departmentName(job.currentDepartmentId),job.status,job.priority,new Date(`${job.dueDate}T12:00:00`),job.overtime?"Yes":"No",new Date(job.createdAt),new Date(job.updatedAt),job.route.map(departmentName).join(" → "),job.notes,job.id,job.currentDepartmentId,job.route.join("|")]),[15,24,38,22,22,13,14,12,21,21,46,44,38,22,42],[3,11,12,15]);
+  const jobsSheet=addSheet("All Jobs",["Job Number","Customer","Description","Current Department","Status","Priority","Due Date","Overtime","Created","Last Updated","Production Route","Notes","Billing State","Billing Note","Completed At","Billing Approved At","Record ID","Department ID","Route Department IDs"],state.jobs.map(job=>[job.jobNumber,job.customer,job.description,departmentName(job.currentDepartmentId),job.status,job.priority,new Date(`${job.dueDate}T12:00:00`),job.overtime?"Yes":"No",new Date(job.createdAt),new Date(job.updatedAt),job.route.map(departmentName).join(" → "),job.notes,job.billingState==="approved"||job.billingApprovedAt?"OK to Bill":job.billingState==="hold"?"Billing Hold":jobIsComplete(job,state.statuses)?"Awaiting Review":"",job.billingNote||"",job.completedAt?new Date(job.completedAt):"",job.billingApprovedAt?new Date(job.billingApprovedAt):"",job.id,job.currentDepartmentId,job.route.join("|")]),[15,24,38,22,22,13,14,12,21,21,46,44,18,42,21,21,38,22,42],[3,11,12,14,19]);
   jobsSheet.getColumn(7).numFmt="mmm d, yyyy";
   jobsSheet.getColumn(9).numFmt="mmm d, yyyy h:mm AM/PM";
   jobsSheet.getColumn(10).numFmt="mmm d, yyyy h:mm AM/PM";
-  jobsSheet.getColumn(13).hidden=true;
-  jobsSheet.getColumn(14).hidden=true;
-  jobsSheet.getColumn(15).hidden=true;
+  jobsSheet.getColumn(15).numFmt="mmm d, yyyy h:mm AM/PM";
+  jobsSheet.getColumn(16).numFmt="mmm d, yyyy h:mm AM/PM";
+  jobsSheet.getColumn(17).hidden=true;
+  jobsSheet.getColumn(18).hidden=true;
+  jobsSheet.getColumn(19).hidden=true;
   jobsSheet.getRow(1).height=29;
   const partRows=state.jobs.flatMap(job=>(job.parts||[]).map(part=>[job.jobNumber,part.code,part.name,part.description,part.quantity,departmentName(part.currentDepartmentId),part.status,new Date(part.updatedAt),part.id,job.id]));
   const partsSheet=addSheet("Job Parts",["Parent Job","Part Barcode","Part Name","Description","Quantity","Current Department","Status","Last Updated","Part ID","Parent Record ID"],partRows,[16,18,24,36,12,22,22,22,38,38],[3,4]);
@@ -255,7 +293,7 @@ async function downloadExcelBackup(state: typeof seedState) {
   scansSheet.getColumn(1).numFmt="mmm d, yyyy h:mm:ss AM/PM";
   addSheet("Departments",["Order","Department","Scanner Prefix","Enabled"],state.departments.map(item=>[item.order,item.name,item.prefix,item.enabled?"Yes":"No"]),[10,28,24,12]);
   addSheet("Statuses",["Order","Status","Barcode Command","Enabled","Closes Job"],state.statuses.map(item=>[item.order,item.name,`STATUS:${item.code}`,item.enabled?"Yes":"No",item.closesJob?"Yes":"No"]),[10,28,30,12,14]);
-  addSheet("Settings",["Setting","Value"],[["Due-date row highlighting",state.settings.deadlineHighlighting?"Enabled":"Disabled"],["Time Here display",state.settings.timeDisplayMode==="days"?"Business days":"Business hours"],["Standard business schedule","Monday–Friday, 8:00 AM–5:00 PM"]],[30,34]);
+  addSheet("Settings",["Setting","Value"],[["Due-date row highlighting",state.settings.deadlineHighlighting?"Enabled":"Disabled"],["Time Here display",state.settings.timeDisplayMode==="days"?"Business days":"Business hours"],["Standard business schedule","Monday–Friday, 8:00 AM–5:00 PM"],["Ready for Billing auto-delete",state.settings.billingAutoDeleteApproved30Days?"Enabled — OK to Bill jobs clear after 30 days":"Disabled — retain until manually cleared"]],[30,48]);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const bytes = new Uint8Array(buffer);
@@ -339,6 +377,9 @@ export default function Home() {
   const [pendingStatuses, setPendingStatuses] = useState<Record<string,{statusId:string;expiresAt:number}>>({});
   const [statusPrint, setStatusPrint] = useState<StatusDefinition[] | null>(null);
   const [managementReport, setManagementReport] = useState<ReportType | null>(null);
+  const [olderScans, setOlderScans] = useState<ScanEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewerPortal] = useState(() => new URLSearchParams(window.location.search).get("view") === "portal");
   const [cloudStatus, setCloudStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -350,6 +391,7 @@ export default function Home() {
   const activeJobsRef = useRef<HTMLElement>(null);
   const cloudReady = useRef(false);
   const pendingCloudState = useRef<typeof state | null>(null);
+  const historyPagingStarted = useRef(false);
 
   useEffect(() => {
     const localState = dataService.load();
@@ -382,6 +424,7 @@ export default function Home() {
       setCloudError("");
       setState(remoteState);
       dataService.save(remoteState);
+      if (!historyPagingStarted.current) setHistoryHasMore(remoteState.scans.length >= 300);
       if (canEdit) void cloudDataService.ensurePublicState(remoteState).catch(error => {
         setCloudError(error instanceof Error ? error.message : "The public viewer could not be initialized.");
       });
@@ -416,19 +459,46 @@ export default function Home() {
     };
   }, []);
   const persist = useCallback((next: typeof state) => {
-    setState(next);
-    dataService.save(next);
+    const normalized = withCompletionMetadata(state, next);
+    setState(normalized);
+    dataService.save(normalized);
     if (canEdit && cloudReady.current) {
-      void cloudDataService.saveChanges(state, next, user.uid).catch(error => {
-        pendingCloudState.current = next;
+      void cloudDataService.saveChanges(state, normalized, user.uid).catch(error => {
+        pendingCloudState.current = normalized;
         cloudReady.current = false;
         setCloudStatus("offline");
         setCloudError(error instanceof Error ? error.message : "The shared update could not be saved.");
       });
     } else if (canEdit) {
-      pendingCloudState.current = next;
+      pendingCloudState.current = normalized;
     }
   }, [canEdit, state, user.uid]);
+
+  const historyScans = useMemo(() => {
+    const combined = new Map<string, ScanEvent>();
+    [...state.scans, ...olderScans].forEach(scan => combined.set(scan.id, scan));
+    return [...combined.values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [state.scans, olderScans]);
+
+  const loadOlderHistory = async () => {
+    const oldest = historyScans.at(-1);
+    if (!oldest || historyLoading) return;
+    historyPagingStarted.current = true;
+    setHistoryLoading(true);
+    try {
+      const page = await cloudDataService.loadOlderScans(oldest.timestamp);
+      setOlderScans(current => {
+        const combined = new Map(current.map(scan => [scan.id, scan]));
+        page.scans.forEach(scan => combined.set(scan.id, scan));
+        return [...combined.values()];
+      });
+      setHistoryHasMore(page.hasMore);
+    } catch (error) {
+      setNotice({ kind: "error", title: "Older history could not be loaded", detail: error instanceof Error ? error.message : "Try again when the cloud connection is available." });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const initializeSharedData = async (source: "local" | "sample") => {
     const next = source === "local" ? dataService.load() : structuredClone(seedState);
@@ -605,6 +675,44 @@ export default function Home() {
   }, [groupBy, organizedJobs, departments, departmentFilter]);
   const today = new Date().toISOString().slice(0,10);
 
+  const approveForBilling = (jobIds: string[]) => {
+    if (!jobIds.length) return;
+    const approvedAt = new Date().toISOString();
+    persist({ ...state, jobs: state.jobs.map(job => jobIds.includes(job.id) && jobIsComplete(job, statuses) ? { ...job, billingState: "approved" as const, billingApprovedAt: approvedAt } : job) });
+    setNotice({ kind: "success", title: `${jobIds.length} ${jobIds.length === 1 ? "job" : "jobs"} approved for billing`, detail: "The 30-day retention period begins when a job is marked OK to Bill." });
+  };
+
+  const clearFromBilling = (jobIds: string[]) => {
+    const removable = new Set(state.jobs.filter(job => jobIds.includes(job.id) && jobIsComplete(job, statuses) && (job.billingState === "approved" || job.billingApprovedAt)).map(job => job.id));
+    if (!removable.size) return;
+    persist({ ...state, jobs: state.jobs.filter(job => !removable.has(job.id)) });
+    setNotice({ kind: "success", title: `${removable.size} billed ${removable.size === 1 ? "job was" : "jobs were"} cleared`, detail: "The closed job records were removed. Their permanent movement events remain in Job History." });
+  };
+
+  const updateBillingDetails = (jobId: string, updates: Pick<Job,"billingState"|"billingNote">) => {
+    const now = new Date().toISOString();
+    persist({
+      ...state,
+      jobs: state.jobs.map(job => {
+        if (job.id !== jobId || !jobIsComplete(job, statuses)) return job;
+        const billingState = updates.billingState || "awaiting";
+        return {
+          ...job,
+          billingState,
+          billingNote: updates.billingNote?.trim() || "",
+          billingApprovedAt: billingState === "approved" ? (job.billingApprovedAt || now) : undefined,
+        };
+      }),
+    });
+  };
+
+  useEffect(() => {
+    if (!hasAdministrationAccess || cloudStatus !== "ready" || !state.settings.billingAutoDeleteApproved30Days) return;
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const expired = state.jobs.filter(job => jobIsComplete(job, state.statuses) && (job.billingState === "approved" || Boolean(job.billingApprovedAt)) && Boolean(job.billingApprovedAt) && new Date(job.billingApprovedAt!).getTime() < cutoff);
+    if (expired.length) persist({ ...state, jobs: state.jobs.filter(job => !expired.some(item => item.id === job.id)) });
+  }, [cloudStatus, hasAdministrationAccess, persist, state]);
+
   const saveStatuses = (nextStatuses: StatusDefinition[]) => {
     const renameMap = new Map(statuses.map(oldStatus => [oldStatus.name,nextStatuses.find(item=>item.id===oldStatus.id)?.name||oldStatus.name]));
     persist({...state,statuses:nextStatuses,jobs:state.jobs.map(job=>({...job,status:renameMap.get(job.status)||job.status,parts:job.parts?.map(part=>({...part,status:renameMap.get(part.status)||part.status}))}))});
@@ -772,9 +880,9 @@ export default function Home() {
         </section>)}
       </section>}
 
-      {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>Every scan is timestamped and retained.</p></div><span className="count-pill">{state.scans.length} events</span></div><div className="history-list">{state.scans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div></section>}
+      {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>The newest 300 movements load instantly. Older records remain in Firestore and can be loaded in pages.</p></div><span className="count-pill">{historyScans.length} loaded</span></div><div className="history-list">{historyScans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div>{historyHasMore&&<div className="history-load-more"><button type="button" className="secondary" disabled={historyLoading} onClick={()=>void loadOlderHistory()}>{historyLoading?"Loading older history…":"Load 250 older movements"}</button><small>Loading older pages does not affect live scanner performance.</small></div>}</section>}
 
-      {page === "admin" && hasAdministrationAccess && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} settings={state.settings} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();persist(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
+      {page === "admin" && hasAdministrationAccess && <><ReadyForBilling jobs={state.jobs} statuses={statuses} autoDelete={state.settings.billingAutoDeleteApproved30Days} onChangeAutoDelete={billingAutoDeleteApproved30Days=>persist({...state,settings:{...state.settings,billingAutoDeleteApproved30Days}})} onApprove={approveForBilling} onClear={clearFromBilling} onUpdate={updateBillingDetails}/><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} settings={state.settings} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();persist(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
     {printPart && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber} · {printPart.job.customer}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div></OverlayPortal>}
@@ -944,6 +1052,35 @@ function ViewerPortalAdminCard() {
     } catch { setCopied(false); }
   };
   return <section className="panel viewer-admin-card"><div className="viewer-admin-icon" aria-hidden="true"><span>◉</span></div><div className="viewer-admin-copy"><p className="eyebrow">PUBLIC READ-ONLY ACCESS</p><h2>Sales & Project Management Viewer</h2><p>A clean viewing portal with search, sorting, and views grouped by department, customer, status, or priority. It contains no edit, scanner, barcode, production-note, or administration controls.</p><div className="viewer-link-row"><input aria-label="Read-only portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer"><span>Open viewer</span><svg className="viewer-open-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 5 11"/></svg></a></div><div className="viewer-local-warning"><b>No login required</b><span>Anyone with this link can view the live production fields shown in the portal. They cannot change jobs or access PlantFlow administration.</span></div></div></section>;
+}
+
+function ReadyForBilling({jobs,statuses,autoDelete,onChangeAutoDelete,onApprove,onClear,onUpdate}:{jobs:Job[];statuses:StatusDefinition[];autoDelete:boolean;onChangeAutoDelete:(enabled:boolean)=>void;onApprove:(jobIds:string[])=>void;onClear:(jobIds:string[])=>void;onUpdate:(jobId:string,updates:Pick<Job,"billingState"|"billingNote">)=>void}) {
+  const [open,setOpen]=useState(false);
+  const [selected,setSelected]=useState<string[]>([]);
+  const [noteJobId,setNoteJobId]=useState<string|null>(null);
+  const [noteDraft,setNoteDraft]=useState("");
+  const [stateFilter,setStateFilter]=useState<"all"|"awaiting"|"approved"|"hold">("all");
+  const ready=jobs.filter(job=>jobIsComplete(job,statuses)).sort((a,b)=>(b.completedAt||b.updatedAt).localeCompare(a.completedAt||a.updatedAt));
+  const approvedSelected=selected.filter(id=>{const job=ready.find(item=>item.id===id);return job?.billingState==="approved"||Boolean(job?.billingApprovedAt)});
+  useEffect(()=>setSelected(current=>current.filter(id=>ready.some(job=>job.id===id))),[jobs]);
+  const toggle=(id:string)=>setSelected(current=>current.includes(id)?current.filter(item=>item!==id):[...current,id]);
+  const editNote=(job:Job)=>{setNoteJobId(job.id);setNoteDraft(job.billingNote||"");};
+  const closeNote=()=>{setNoteJobId(null);setNoteDraft("");};
+  const billingState=(job:Job)=>job.billingState||(job.billingApprovedAt?"approved":"awaiting");
+  const visibleReady=stateFilter==="all"?ready:ready.filter(job=>billingState(job)===stateFilter);
+  const allSelected=visibleReady.length>0&&visibleReady.every(job=>selected.includes(job.id));
+  return <section className={`panel ready-billing ${open?"open":""}`}>
+    <button type="button" className="ready-billing-toggle" aria-expanded={open} onClick={()=>setOpen(current=>!current)}>
+      <span className="ready-billing-folder" aria-hidden="true">▰</span>
+      <span><b>Ready for Billing</b><small>Completed jobs stay here until approved and cleared</small></span>
+      <em>{ready.length}</em><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+    </button>
+    {open&&<div className="ready-billing-body">
+      <div className="billing-retention-setting"><div><b>Automatically clear OK to Bill jobs after 30 days</b><span>{autoDelete?"On — the 30-day timer begins when a job is changed to OK to Bill. Awaiting Review and Billing Hold jobs stay here.":"Off — all billing records stay here until an administrator clears them manually."}</span></div><label className="switch" aria-label="Automatically clear OK to Bill jobs after 30 days"><input type="checkbox" checked={autoDelete} onChange={event=>onChangeAutoDelete(event.target.checked)}/><span/></label></div>
+      <div className="ready-billing-note"><b>Billing workflow</b><span>Change each job’s billing state, add an internal billing note when needed, and clear approved records after billing. Permanent movement events remain in Job History.</span></div>
+      {ready.length?<><div className="ready-billing-actions"><label><input type="checkbox" checked={allSelected} onChange={()=>setSelected(allSelected?selected.filter(id=>!visibleReady.some(job=>job.id===id)):[...new Set([...selected,...visibleReady.map(job=>job.id)])])}/> Select shown</label><select className="billing-filter" aria-label="Filter Ready for Billing by state" value={stateFilter} onChange={event=>setStateFilter(event.target.value as typeof stateFilter)}><option value="all">All billing states</option><option value="awaiting">Awaiting review</option><option value="approved">OK to bill</option><option value="hold">Billing hold</option></select><span>{selected.length} selected</span><button type="button" className="secondary" disabled={!selected.length} onClick={()=>onApprove(selected)}>Mark selected OK to bill</button><button type="button" className="billing-clear-button" disabled={!approvedSelected.length} onClick={()=>{onClear(approvedSelected);setSelected(current=>current.filter(id=>!approvedSelected.includes(id)))}}>Clear approved from folder</button></div>{visibleReady.length?<div className="ready-billing-table-wrap"><table className="ready-billing-table"><thead><tr><th/><th>Job</th><th>Customer / Description</th><th>Completed</th><th>Priority</th><th>Billing state</th><th>Note</th></tr></thead><tbody>{visibleReady.map(job=><Fragment key={job.id}><tr><td><input type="checkbox" checked={selected.includes(job.id)} onChange={()=>toggle(job.id)} aria-label={`Select job ${job.jobNumber}`}/></td><td><b>{job.jobNumber}</b></td><td><b>{job.customer}</b><small>{job.description}</small></td><td>{new Date(job.completedAt||job.updatedAt).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}</td><td><span className={`priority-text ${job.priority.toLowerCase()}`}>{job.priority}</span></td><td><select className={`billing-state-select ${billingState(job)}`} aria-label={`Billing state for job ${job.jobNumber}`} value={billingState(job)} onChange={event=>onUpdate(job.id,{billingState:event.target.value as Job["billingState"],billingNote:job.billingNote||""})}><option value="awaiting">Awaiting review</option><option value="approved">OK to bill</option><option value="hold">Billing hold</option></select></td><td><button type="button" className={`billing-note-button ${job.billingNote?"has-note":""}`} onClick={()=>noteJobId===job.id?closeNote():editNote(job)}>{job.billingNote?"Edit note":"Add note"}</button></td></tr>{noteJobId===job.id&&<tr className="billing-note-row"><td colSpan={7}><div className="billing-note-editor"><label><span>Billing note for Job {job.jobNumber}</span><textarea autoFocus rows={3} maxLength={500} value={noteDraft} onChange={event=>setNoteDraft(event.target.value)} placeholder="Add a billing detail, PO reminder, exception, or follow-up…"/></label><div><small>{noteDraft.length} / 500</small><button type="button" className="secondary" onClick={closeNote}>Cancel</button><button type="button" className="primary" onClick={()=>{onUpdate(job.id,{billingState:billingState(job),billingNote:noteDraft});closeNote();}}>Save note</button></div></div></td></tr>}</Fragment>)}</tbody></table></div>:<div className="ready-billing-filter-empty">No jobs match this billing state.</div>}</>:<div className="ready-billing-empty"><b>No completed jobs are waiting for billing.</b><span>Jobs appear here automatically when their status changes to Complete.</span></div>}
+    </div>}
+  </section>;
 }
 
 function ReportsBackupPanel({onReport,onBackup}:{onReport:(type:ReportType)=>void;onBackup:()=>void}) {
