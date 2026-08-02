@@ -16,6 +16,7 @@ type Notice = { kind: "success" | "error" | "duplicate"; title: string; detail: 
 type ReportType = "daily" | "snapshot" | "workload" | "risks";
 type SafariFullscreenDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
 type SafariFullscreenElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type DepartmentSelection = string[] | null;
 
 const nav: { id: Page; label: string; icon: string }[] = [
   { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
@@ -188,12 +189,10 @@ function withCompletionMetadata(previousState: typeof seedState, nextState: type
 function parentLocation(job: Job, deptName: (id: string) => string) {
   const parts = job.parts || [];
   if (!parts.length) return deptName(job.currentDepartmentId);
-  const locations = [...new Set(parts.map(part => part.currentDepartmentId))];
-  return locations.length === 1 ? deptName(locations[0]) : "Multiple locations";
+  return "Multiple parts";
 }
 
 function jobIsInDepartment(job: Job, departmentId: string) {
-  if (!departmentId) return true;
   const parts = job.parts || [];
   if (departmentId === "__not_started__") {
     return parts.length ? parts.some(part => !part.currentDepartmentId) : !job.currentDepartmentId;
@@ -201,11 +200,48 @@ function jobIsInDepartment(job: Job, departmentId: string) {
   return parts.length ? parts.some(part => part.currentDepartmentId === departmentId) : job.currentDepartmentId === departmentId;
 }
 
+function jobIsInDepartments(job:Job,departmentIds:DepartmentSelection) {
+  if (departmentIds===null) return true;
+  return departmentIds.some(departmentId=>jobIsInDepartment(job,departmentId));
+}
+
+function departmentSelectionLabel(selection:DepartmentSelection,departmentName:(id:string)=>string) {
+  if (selection===null) return "All departments";
+  if (!selection.length) return "No departments";
+  if (selection.length===1) return selection[0]==="__not_started__"?"Not started":departmentName(selection[0]);
+  return `${selection.length} departments`;
+}
+
+function DepartmentMultiSelect({departments,value,onChange,compact=false}:{departments:Department[];value:DepartmentSelection;onChange:(value:DepartmentSelection)=>void;compact?:boolean}) {
+  const [open,setOpen]=useState(false);
+  const rootRef=useRef<HTMLDivElement>(null);
+  const options=[{id:"__not_started__",name:"Not started"},...departments.filter(department=>department.enabled).sort((a,b)=>a.order-b.order).map(department=>({id:department.id,name:department.name}))];
+  const allIds=options.map(option=>option.id);
+  const isSelected=(id:string)=>value===null||value.includes(id);
+  const toggle=(id:string)=>{
+    const current=value===null?allIds:value;
+    const next=current.includes(id)?current.filter(item=>item!==id):[...current,id];
+    onChange(next.length===allIds.length?null:next);
+  };
+  useEffect(()=>{
+    if(!open)return;
+    const close=(event:MouseEvent)=>{if(!rootRef.current?.contains(event.target as Node))setOpen(false)};
+    const escape=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false)};
+    document.addEventListener("mousedown",close);
+    document.addEventListener("keydown",escape);
+    return()=>{document.removeEventListener("mousedown",close);document.removeEventListener("keydown",escape)};
+  },[open]);
+  const name=(id:string)=>options.find(option=>option.id===id)?.name||id;
+  return <div className={`department-multi ${compact?"compact":""} ${open?"open":""}`} ref={rootRef}>
+    <button type="button" className="department-multi-trigger" aria-haspopup="true" aria-expanded={open} onClick={()=>setOpen(current=>!current)}><span>{departmentSelectionLabel(value,name)}</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+    {open&&<div className="department-multi-menu"><div className="department-multi-actions"><button type="button" onClick={()=>onChange(null)}>Show all</button><button type="button" onClick={()=>onChange([])}>Clear</button></div><div className="department-multi-options">{options.map(option=><label key={option.id}><input type="checkbox" checked={isSelected(option.id)} onChange={()=>toggle(option.id)}/><span>{option.name}</span></label>)}</div><div className="department-multi-footer"><span>{value===null?"Every department is shown":`${value.length} of ${options.length} selected`}</span><button type="button" onClick={()=>setOpen(false)}>Done</button></div></div>}
+  </div>;
+}
+
 function parentStatus(job: Job) {
   const parts = job.parts || [];
   if (!parts.length) return job.status;
-  const statuses = [...new Set(parts.map(part => part.status))];
-  return statuses.length === 1 ? statuses[0] : "Mixed status";
+  return "View parts";
 }
 
 function parentUpdatedAt(job: Job) {
@@ -370,7 +406,7 @@ export default function Home() {
   const [splitJob, setSplitJob] = useState<Job | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "location" | "customer">("none");
   const [sortBy, setSortBy] = useState<"recent" | "due" | "priority" | "time" | "job" | "customer">("recent");
-  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState<DepartmentSelection>(null);
   const [jobControlsOpen, setJobControlsOpen] = useState(false);
   const [jobActionsOpen, setJobActionsOpen] = useState(false);
   const [jobsFullscreen, setJobsFullscreen] = useState(false);
@@ -382,6 +418,7 @@ export default function Home() {
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewerPortal] = useState(() => new URLSearchParams(window.location.search).get("view") === "portal");
+  const [productionFloorPortal] = useState(() => new URLSearchParams(window.location.search).get("view") === "production");
   const [cloudStatus, setCloudStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [cloudError, setCloudError] = useState("");
   const [migrationRequired, setMigrationRequired] = useState(false);
@@ -651,7 +688,7 @@ export default function Home() {
   const statuses = state.statuses;
   const deptName = (id: string) => departments.find(d => d.id === id)?.name || "Not started";
   const activeJobs = state.jobs.filter(job => !jobIsClosed(job,statuses));
-  const filteredJobs = activeJobs.filter(j => jobIsInDepartment(j,departmentFilter) && `${j.jobNumber} ${j.customer} ${j.description}`.toLowerCase().includes(query.toLowerCase()));
+  const filteredJobs = activeJobs.filter(j => jobIsInDepartments(j,departmentFilter) && `${j.jobNumber} ${j.customer} ${j.description}`.toLowerCase().includes(query.toLowerCase()));
   const organizedJobs = useMemo(() => {
     const priorityRank = { Critical: 0, Rush: 1, Standard: 2 };
     return [...filteredJobs].sort((a,b) => {
@@ -664,14 +701,16 @@ export default function Home() {
     });
   }, [filteredJobs, sortBy]);
   const jobGroups = useMemo(() => {
-    if (groupBy === "none") return [{ key: "all", label: departmentFilter ? `${departmentFilter === "__not_started__" ? "Not started" : deptName(departmentFilter)} jobs` : "All active jobs", jobs: organizedJobs }];
+    if (groupBy === "none") return [{ key: "all", label: departmentFilter===null?"All active jobs":`${departmentSelectionLabel(departmentFilter,deptName)} jobs`, jobs: organizedJobs }];
     const grouped = new Map<string, Job[]>();
     organizedJobs.forEach(job => {
       const partLocations = [...new Set((job.parts || []).map(part=>part.currentDepartmentId))];
       const key = groupBy === "location" ? (partLocations.length > 1 ? "multiple-locations" : (partLocations[0] || job.currentDepartmentId || "not-started")) : job.customer;
       grouped.set(key, [...(grouped.get(key) || []), job]);
     });
-    return [...grouped.entries()].map(([key,jobs]) => ({ key, label: groupBy === "location" ? (key === "multiple-locations" ? "Multiple locations" : deptName(key === "not-started" ? "" : key)) : key, jobs }));
+    const groups=[...grouped.entries()].map(([key,jobs]) => ({ key, label: groupBy === "location" ? (key === "multiple-locations" ? "Multiple locations" : deptName(key === "not-started" ? "" : key)) : key, jobs }));
+    if (groups.length) return groups;
+    return [{key:"empty",label:departmentFilter===null?"Active jobs":`${departmentSelectionLabel(departmentFilter,deptName)} jobs`,jobs:[]}];
   }, [groupBy, organizedJobs, departments, departmentFilter]);
   const today = new Date().toISOString().slice(0,10);
 
@@ -687,6 +726,36 @@ export default function Home() {
     if (!removable.size) return;
     persist({ ...state, jobs: state.jobs.filter(job => !removable.has(job.id)) });
     setNotice({ kind: "success", title: `${removable.size} billed ${removable.size === 1 ? "job was" : "jobs were"} cleared`, detail: "The closed job records were removed. Their permanent movement events remain in Job History." });
+  };
+
+  const deleteJobPermanently = async (job: Job) => {
+    try {
+      await cloudDataService.deleteJobPermanently(job);
+      const identifiers = new Set([job.jobNumber, ...(job.parts || []).map(part => part.code)]);
+      const next = { ...state, jobs: state.jobs.filter(item => item.id !== job.id), scans: state.scans.filter(scan => !identifiers.has(scan.jobNumber)) };
+      setState(next);
+      dataService.save(next);
+      setOlderScans(current => current.filter(scan => !identifiers.has(scan.jobNumber)));
+      setSelectedJob(null);
+      setNotice({ kind: "success", title: `Job ${job.jobNumber} permanently deleted`, detail: "The job, its parts, and all movement history were removed. This job number can now be used again." });
+    } catch (error) {
+      setNotice({ kind: "error", title: "Job could not be deleted", detail: error instanceof Error ? error.message : "The cloud deletion did not complete." });
+    }
+  };
+
+  const clearAllJobData = async () => {
+    try {
+      await cloudDataService.clearAllJobData();
+      const next = { ...state, jobs: [], scans: [] };
+      setState(next);
+      dataService.save(next);
+      setOlderScans([]);
+      setHistoryHasMore(false);
+      setSelectedJob(null);
+      setNotice({ kind: "success", title: "PlantFlow job data reset", detail: "All jobs and movement history were removed. Departments, statuses, settings, and user access were preserved." });
+    } catch (error) {
+      setNotice({ kind: "error", title: "Job reset did not complete", detail: error instanceof Error ? error.message : "The cloud deletion did not complete." });
+    }
   };
 
   const updateBillingDetails = (jobId: string, updates: Pick<Job,"billingState"|"billingNote">) => {
@@ -719,14 +788,15 @@ export default function Home() {
     setNotice({kind:"success",title:"Statuses updated",detail:"Status names, commands, colors, and availability were saved."});
   };
 
-  const saveJobOverride = (original: Job, updated: Job, minutesHere: number) => {
+  const saveJobOverride = (original: Job, updated: Job, minutesHere: number, allowScheduleOverride=false) => {
     if (state.jobs.some(job => job.id !== original.id && job.jobNumber === updated.jobNumber)) {
       setNotice({ kind: "error", title: "Duplicate job number", detail: `${updated.jobNumber} is already being used.` });
       return;
     }
     const locationChanged = updated.currentDepartmentId !== original.currentDepartmentId;
-    const adjustedUpdatedAt = canChangeSchedule ? timestampForTrackedMinutesAgo(minutesHere,Boolean(updated.overtime)) : locationChanged ? new Date().toISOString() : original.updatedAt;
-    const saved = { ...updated, dueDate: canChangeSchedule ? updated.dueDate : original.dueDate, updatedAt: adjustedUpdatedAt };
+    const scheduleAllowed=canChangeSchedule||allowScheduleOverride;
+    const adjustedUpdatedAt = scheduleAllowed ? timestampForTrackedMinutesAgo(minutesHere,Boolean(updated.overtime)) : locationChanged ? new Date().toISOString() : original.updatedAt;
+    const saved = { ...updated, dueDate: scheduleAllowed ? updated.dueDate : original.dueDate, updatedAt: adjustedUpdatedAt };
     let scans = state.scans.map(scan => scan.jobNumber === original.jobNumber ? { ...scan, jobNumber: saved.jobNumber } : scan);
     if (saved.currentDepartmentId !== original.currentDepartmentId) {
       const department = departments.find(item => item.id === saved.currentDepartmentId);
@@ -737,9 +807,9 @@ export default function Home() {
     setNotice({ kind: "success", title: `Job ${saved.jobNumber} updated`, detail: "Manual changes were saved and the job record was refreshed." });
   };
 
-  const updateJobInline = (job: Job, field: "location" | "status" | "dueDate" | "priority", value: string) => {
-    if (field === "dueDate" && !canChangeSchedule) return;
-    if ((field === "location" && value === job.currentDepartmentId) || (field === "status" && value === job.status) || (field === "dueDate" && value === job.dueDate) || (field === "priority" && value === job.priority)) return;
+  const updateJobInline = (job: Job, field: "location" | "status" | "dueDate" | "priority" | "notes", value: string, allowScheduleOverride=false) => {
+    if (field === "dueDate" && !canChangeSchedule && !allowScheduleOverride) return;
+    if ((field === "location" && value === job.currentDepartmentId) || (field === "status" && value === job.status) || (field === "dueDate" && value === job.dueDate) || (field === "priority" && value === job.priority) || (field === "notes" && value === job.notes)) return;
     const now = new Date().toISOString();
     const departmentId = field === "location" ? value : job.currentDepartmentId;
     const departmentName = deptName(departmentId);
@@ -750,11 +820,12 @@ export default function Home() {
       status: statusName || job.status,
       dueDate: field === "dueDate" ? value : job.dueDate,
       priority: field === "priority" ? value as Job["priority"] : job.priority,
+      notes: field === "notes" ? value : job.notes,
       updatedAt: field === "location" ? now : job.updatedAt,
     };
-    if (field === "dueDate" || field === "priority") {
+    if (field === "dueDate" || field === "priority" || field === "notes") {
       persist({ ...state, jobs: state.jobs.map(item => item.id === job.id ? updatedJob : item) });
-      setNotice({ kind: "success", title: `Job ${job.jobNumber} updated`, detail: field === "dueDate" ? `Due date changed to ${formatDate(value)}.` : `Priority changed to ${value}.` });
+      setNotice({ kind: "success", title: `Job ${job.jobNumber} updated`, detail: field === "dueDate" ? `Due date changed to ${formatDate(value)}.` : field === "priority" ? `Priority changed to ${value}.` : "Production note saved." });
       return;
     }
     const event: ScanEvent = {
@@ -833,6 +904,7 @@ export default function Home() {
 
   if (cloudStatus === "loading") return <div className="auth-screen"><div className="auth-loading"><span className="auth-spinner"/><b>Loading shared production data…</b><small>Connecting to PlantFlow Cloud</small></div></div>;
 
+  if (productionFloorPortal && canEdit) return <><ProductionFloorPortal state={state} notice={notice} onDismissNotice={()=>setNotice(null)} onReview={setSelectedJob} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onSplit={setSplitJob} onUpdateJob={(job,field,value)=>updateJobInline(job,field,value,true)} onUpdatePart={updatePartInline}/><div className="production-scanner-status"><i/><span>Scanner ready</span></div><button className="viewer-signout" type="button" onClick={()=>void logout()}>Sign out</button>{printJob&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span><span>Due {formatDate(printJob.dueDate)}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div>}{printPart&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div>}{selectedJob&&<JobEditor key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} canChangeSchedule onClose={()=>setSelectedJob(null)} onSave={(original,updated,minutes)=>saveJobOverride(original,updated,minutes,true)} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}}/>}{splitJob&&<SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/>}</>;
   if (viewerPortal || profile.role === "viewer") return <><ReadOnlyPortal state={state}/><button className="viewer-signout" type="button" onClick={()=>void logout()}>Sign out</button></>;
 
   const availableNav = hasAdministrationAccess ? nav : nav.filter(item => item.id !== "admin");
@@ -875,22 +947,80 @@ export default function Home() {
       {page === "jobs" && <section className="jobs-workspace" ref={activeJobsRef}>
         {jobGroups.map((group,index)=><section className={`panel job-group ${index===0&&jobControlsOpen?"controls-open":""}`} key={group.key}>
           <div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div>{index===0&&<div className="jobs-toolbar-actions"><button type="button" className="fullscreen-toggle" onClick={toggleActiveJobsFullscreen}>{jobsFullscreen?<svg className="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3v5H3M12 17v-5h5M3 8l5-5M17 12l-5 5"/></svg>:<svg className="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3H3v4M13 3h4v4M17 13v4h-4M7 17H3v-4"/></svg>}<span>{jobsFullscreen?"Exit full screen":"Full screen"}</span></button><button type="button" className="controls-toggle" aria-expanded={jobControlsOpen} aria-controls="active-job-controls" onClick={()=>setJobControlsOpen(open=>!open)}><span>{jobControlsOpen?"Hide controls":"Search, organize & sort"}</span><svg className="toolbar-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></div>}</div>
-          {index===0&&jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><label><span>Department</span><select value={departmentFilter} onChange={e=>setDepartmentFilter(e.target.value)}><option value="">All departments</option><option value="__not_started__">Not started</option>{departments.filter(department=>department.enabled).map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}
+          {index===0&&jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="control-field"><span>Departments</span><DepartmentMultiSelect departments={departments} value={departmentFilter} onChange={setDepartmentFilter}/></div><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></div>}
           <JobTable jobs={group.jobs} deptName={deptName} settings={state.settings} detailed highlightDeadlines={state.settings.deadlineHighlighting} showActions={jobActionsOpen} collapsibleActions onToggleActions={()=>setJobActionsOpen(open=>!open)} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onOpen={setSelectedJob} onSplit={setSplitJob} departments={departments} statuses={statuses} allowDateEditing={canChangeSchedule} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/>
         </section>)}
       </section>}
 
       {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>The newest 300 movements load instantly. Older records remain in Firestore and can be loaded in pages.</p></div><span className="count-pill">{historyScans.length} loaded</span></div><div className="history-list">{historyScans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div>{historyHasMore&&<div className="history-load-more"><button type="button" className="secondary" disabled={historyLoading} onClick={()=>void loadOlderHistory()}>{historyLoading?"Loading older history…":"Load 250 older movements"}</button><small>Loading older pages does not affect live scanner performance.</small></div>}</section>}
 
-      {page === "admin" && hasAdministrationAccess && <><ReadyForBilling jobs={state.jobs} statuses={statuses} autoDelete={state.settings.billingAutoDeleteApproved30Days} onChangeAutoDelete={billingAutoDeleteApproved30Days=>persist({...state,settings:{...state.settings,billingAutoDeleteApproved30Days}})} onApprove={approveForBilling} onClear={clearFromBilling} onUpdate={updateBillingDetails}/><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} settings={state.settings} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();persist(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
+      {page === "admin" && hasAdministrationAccess && <><ReadyForBilling jobs={state.jobs} statuses={statuses} autoDelete={state.settings.billingAutoDeleteApproved30Days} onChangeAutoDelete={billingAutoDeleteApproved30Days=>persist({...state,settings:{...state.settings,billingAutoDeleteApproved30Days}})} onApprove={approveForBilling} onClear={clearFromBilling} onUpdate={updateBillingDetails}/><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<ProductionPortalAdminCard/><ViewerPortalAdminCard/><DataMaintenancePanel jobCount={state.jobs.length} onClearAllJobs={clearAllJobData}/><Admin departments={departments} statuses={statuses} jobs={state.jobs} settings={state.settings} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} onReset={()=>{const next=dataService.reset();persist(next);setNotice({kind:"success",title:"Demo data restored",detail:"Placeholder departments, statuses, and sample jobs were reset."})}} /></>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
     {printPart && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber} · {printPart.job.customer}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div></OverlayPortal>}
-    {selectedJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><JobEditor key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} canChangeSchedule={canChangeSchedule} onClose={()=>setSelectedJob(null)} onSave={saveJobOverride} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}} /></OverlayPortal>}
+    {selectedJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}>{hasAdministrationAccess?<div className="job-review-stack"><JobEditor key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} canChangeSchedule={canChangeSchedule} onClose={()=>setSelectedJob(null)} onSave={saveJobOverride} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}} /><ActiveJobDeleteAction job={selectedJob} onDelete={deleteJobPermanently}/></div>:<JobEditor key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} canChangeSchedule={canChangeSchedule} onClose={()=>setSelectedJob(null)} onSave={saveJobOverride} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}} />}</OverlayPortal>}
     {splitJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/></OverlayPortal>}
     {statusPrint && <StatusPrintSheet statuses={statusPrint} onClose={()=>setStatusPrint(null)} onPrint={printStatusBarcodes}/>} 
     {managementReport && <ManagementReport type={managementReport} state={state} onClose={()=>setManagementReport(null)} onPrint={printManagementReport}/>} 
     {migrationRequired && <div className="migration-overlay" role="dialog" aria-modal="true" aria-label="Initialize shared PlantFlow data"><div className="migration-card"><p className="eyebrow">ONE-TIME CLOUD SETUP</p><h2>Choose the shared starting data</h2><p>No shared PlantFlow records exist yet. Nothing will be uploaded until you choose an option.</p><div className="migration-options"><button className="primary" onClick={()=>void initializeSharedData("local")}><b>Use this device’s PlantFlow data</b><span>Uploads the jobs, history, departments, and statuses currently shown here.</span></button><button className="secondary" onClick={()=>void initializeSharedData("sample")}><b>Start with fresh sample data</b><span>Creates a clean shared pilot using the placeholder jobs and departments.</span></button></div><small>Recommended: use this device’s data if it contains the PlantFlow records you want to keep.</small></div></div>}
+  </div>;
+}
+
+function ProductionFloorPortal({state,notice,onDismissNotice,onReview,onPrint,onPrintPart,onSplit,onUpdateJob,onUpdatePart}:{state:typeof seedState;notice:Notice;onDismissNotice:()=>void;onReview:(job:Job)=>void;onPrint:(job:Job)=>void;onPrintPart:(job:Job,part:JobPart)=>void;onSplit:(job:Job)=>void;onUpdateJob:(job:Job,field:"location"|"status"|"dueDate"|"priority"|"notes",value:string)=>void;onUpdatePart:(job:Job,part:JobPart,field:"location"|"status",value:string)=>void}) {
+  type ViewerTheme="classic"|"graphite";
+  const [search,setSearch]=useState("");
+  const [departmentFilter,setDepartmentFilter]=useState<DepartmentSelection>(null);
+  const [group,setGroup]=useState<"none"|"department"|"customer"|"status"|"priority">("none");
+  const [sort,setSort]=useState<"due"|"recent"|"job"|"customer"|"priority">("recent");
+  const [expandedJobs,setExpandedJobs]=useState<string[]>([]);
+  const [noteDrafts,setNoteDrafts]=useState<Record<string,string>>({});
+  const [summaryOpen,setSummaryOpen]=useState(false);
+  const [controlsOpen,setControlsOpen]=useState(false);
+  const [viewerTheme,setViewerTheme]=useState<ViewerTheme>(()=>window.localStorage.getItem("plantflow-production-portal-theme-v1")==="graphite"?"graphite":"classic");
+  const changeViewerTheme=(theme:ViewerTheme)=>{setViewerTheme(theme);window.localStorage.setItem("plantflow-production-portal-theme-v1",theme)};
+  const departmentName=(id:string)=>state.departments.find(item=>item.id===id)?.name||"Not started";
+  const active=state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
+  const visibleJobs=useMemo(()=>{
+    const term=search.trim().toLowerCase();
+    const priorityRank={Critical:0,Rush:1,Standard:2};
+    return active.filter(job=>jobIsInDepartments(job,departmentFilter)&&`${job.jobNumber} ${job.customer} ${job.description} ${parentLocation(job,departmentName)} ${parentStatus(job)}`.toLowerCase().includes(term)).sort((a,b)=>{
+      if(sort==="recent")return parentUpdatedAt(b).localeCompare(parentUpdatedAt(a));
+      if(sort==="job")return a.jobNumber.localeCompare(b.jobNumber,undefined,{numeric:true});
+      if(sort==="customer")return a.customer.localeCompare(b.customer)||a.dueDate.localeCompare(b.dueDate);
+      if(sort==="priority")return priorityRank[a.priority]-priorityRank[b.priority]||a.dueDate.localeCompare(b.dueDate);
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+  },[active,departmentFilter,search,sort,state.departments]);
+  const groups=useMemo(()=>{
+    if(group==="none")return [{key:"all",label:departmentFilter===null?"All active jobs":`${departmentSelectionLabel(departmentFilter,departmentName)} jobs`,jobs:visibleJobs}];
+    const buckets=new Map<string,Job[]>();
+    visibleJobs.forEach(job=>{const key=group==="department"?parentLocation(job,departmentName):group==="customer"?job.customer:group==="status"?parentStatus(job):job.priority;buckets.set(key,[...(buckets.get(key)||[]),job])});
+    const grouped=[...buckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([key,jobs])=>({key,label:key,jobs}));
+    return grouped.length?grouped:[{key:"empty",label:"No matching jobs",jobs:[]}];
+  },[group,visibleJobs,departmentFilter,state.departments]);
+  const enabledDepartments=state.departments.filter(item=>item.enabled).sort((a,b)=>a.order-b.order);
+  const enabledStatuses=state.statuses.filter(item=>item.enabled).sort((a,b)=>a.order-b.order);
+  const today=localDateValue();
+  const routeHistory=(job:Job)=>{
+    const trackedCodes=new Set([job.jobNumber,...(job.parts||[]).map(part=>part.code)]);
+    const movements=state.scans
+      .filter(scan=>trackedCodes.has(scan.jobNumber))
+      .sort((a,b)=>a.timestamp.localeCompare(b.timestamp))
+      .map(scan=>scan.departmentName||departmentName(scan.departmentId));
+    return movements.filter((name,index)=>index===0||name!==movements[index-1]).join(" → ")||"No recorded movements yet";
+  };
+  const toggleExpanded=(jobId:string)=>setExpandedJobs(current=>current.includes(jobId)?current.filter(id=>id!==jobId):[...current,jobId]);
+  return <div className={`viewer-portal production-floor-portal viewer-theme-${viewerTheme}`}>
+    <header className="viewer-header"><div className="viewer-brand"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><p className="eyebrow">PLANTFLOW PRODUCTION</p><h1>Production Floor Portal</h1><span>Review and update live production jobs from the shop floor.</span></div></div><div className="viewer-header-tools"><div className="viewer-theme-toggle" role="group" aria-label="Production portal color mode"><button type="button" className={viewerTheme==="classic"?"active":""} aria-pressed={viewerTheme==="classic"} onClick={()=>changeViewerTheme("classic")}>Light</button><button type="button" className={viewerTheme==="graphite"?"active":""} aria-pressed={viewerTheme==="graphite"} onClick={()=>changeViewerTheme("graphite")}>Dark</button></div><div className="viewer-updated"><i/><div><b>Live editing enabled</b><span>Updated {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span></div></div></div></header>
+    <main className="viewer-main">
+      {notice&&<div className={`production-portal-notice ${notice.kind}`} role="status"><span>{notice.kind==="success"?"✓":"!"}</span><div><b>{notice.title}</b><small>{notice.detail}</small></div><button type="button" aria-label="Dismiss message" onClick={onDismissNotice}>×</button></div>}
+      <div className="viewer-section-toggles"><button type="button" aria-expanded={summaryOpen} onClick={()=>setSummaryOpen(current=>!current)}><span>Production summary</span><small>{active.length} active · {visibleJobs.length} shown</small><b>{summaryOpen?"⌃":"⌄"}</b></button><button type="button" aria-expanded={controlsOpen} onClick={()=>setControlsOpen(current=>!current)}><span>Find, filter & arrange</span><small>{departmentFilter===null?"All departments":departmentSelectionLabel(departmentFilter,departmentName)}</small><b>{controlsOpen?"⌃":"⌄"}</b></button></div>
+      {summaryOpen&&<section className="viewer-metrics viewer-collapsible-section"><div><span>Active jobs</span><b>{active.length}</b></div><div><span>Shown</span><b>{visibleJobs.length}</b></div><div><span>Due today</span><b>{active.filter(job=>job.dueDate===today).length}</b></div><div><span>Rush / critical</span><b>{active.filter(job=>job.priority!=="Standard").length}</b></div></section>}
+      {controlsOpen&&<section className="viewer-controls production-portal-controls panel viewer-collapsible-section"><label className="viewer-search"><span>Find a job</span><input placeholder="Job, customer, description…" value={search} onChange={event=>setSearch(event.target.value)}/></label><div className="control-field"><span>Departments</span><DepartmentMultiSelect departments={state.departments} value={departmentFilter} onChange={setDepartmentFilter} compact/></div><label><span>View</span><select value={group} onChange={event=>setGroup(event.target.value as typeof group)}><option value="none">Overall view</option><option value="department">Group by department</option><option value="customer">Group by customer</option><option value="status">Group by status</option><option value="priority">Group by priority</option></select></label><label><span>Sort</span><select value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="recent">Most recently moved</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></section>}
+      <div className="production-mobile-guidance"><b>Tap location or status to update it.</b><span>Tap the rest of a job row to expand details, time here, and production notes.</span></div>
+      <section className="viewer-groups production-portal-groups">{groups.map(bucket=><article className="panel viewer-group production-portal-group" key={bucket.key}><div className="viewer-group-head"><div><h2>{bucket.label}</h2><p>{bucket.jobs.length} {bucket.jobs.length===1?"job":"jobs"}</p></div></div><div className="viewer-table-wrap"><table className="viewer-table production-edit-table"><thead><tr><th>Job</th><th>Customer / Description</th><th>Department</th><th>Status</th><th>Priority</th><th>Due</th><th>Time here</th><th><span className="sr-only">Details</span></th></tr></thead><tbody>{bucket.jobs.map(job=><Fragment key={job.id}><tr className={`production-summary-row ${deadlineTone(job.dueDate,state.settings.deadlineHighlighting)} ${expandedJobs.includes(job.id)?"expanded":""}`} tabIndex={0} aria-expanded={expandedJobs.includes(job.id)} onClick={event=>{if((event.target as HTMLElement).closest("button,input,select,textarea,label"))return;toggleExpanded(job.id)}} onKeyDown={event=>{if((event.key==="Enter"||event.key===" ")&&!(event.target as HTMLElement).closest("button,input,select,textarea")){event.preventDefault();toggleExpanded(job.id)}}}><td><strong>{job.jobNumber}</strong>{job.notes&&<small className="viewer-note-indicator">● Note</small>}{job.parts?.length&&<small>{job.parts.length} tracked parts</small>}</td><td><b>{job.customer}</b><small>{job.description}</small></td><td>{job.parts?.length?<span className="department-pill">{parentLocation(job,departmentName)}</span>:<select aria-label={`Location for job ${job.jobNumber}`} className="production-pill-select department-pill" value={job.currentDepartmentId} onChange={event=>onUpdateJob(job,"location",event.target.value)}><option value="">Not started</option>{enabledDepartments.map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select>}</td><td>{job.parts?.length?<span className={`status-pill ${statusTone[parentStatus(job)]||"slate"}`}>{parentStatus(job)}</span>:<select aria-label={`Status for job ${job.jobNumber}`} className={`production-pill-select status-pill ${statusTone[job.status]||"slate"}`} value={job.status} onChange={event=>onUpdateJob(job,"status",event.target.value)}>{enabledStatuses.map(status=><option key={status.id}>{status.name}</option>)}</select>}</td><td><select aria-label={`Priority for job ${job.jobNumber}`} className={`production-priority-select priority-text ${job.priority.toLowerCase()}`} value={job.priority} onChange={event=>onUpdateJob(job,"priority",event.target.value)}><option>Standard</option><option>Rush</option><option>Critical</option></select></td><td><input aria-label={`Due date for job ${job.jobNumber}`} className="production-date-select" type="date" value={job.dueDate} onChange={event=>onUpdateJob(job,"dueDate",event.target.value)}/></td><td>{formatTrackedTime(parentUpdatedAt(job),state.settings,job.overtime)}</td><td><button type="button" className="production-expand-button" aria-label={`${expandedJobs.includes(job.id)?"Collapse":"Expand"} job ${job.jobNumber}`} onClick={()=>toggleExpanded(job.id)}>{expandedJobs.includes(job.id)?"⌃":"⌄"}</button></td></tr>{expandedJobs.includes(job.id)&&<tr className="production-expanded-row"><td colSpan={8}><div className="production-expanded-content"><div className="production-detail-summary"><span><b>Created</b>{new Date(job.createdAt).toLocaleDateString()}</span><span><b>Last movement</b>{new Date(parentUpdatedAt(job)).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</span><span><b>Time here</b>{formatTrackedTime(parentUpdatedAt(job),state.settings,job.overtime)}</span><span><b>Route history</b>{routeHistory(job)}</span></div>{job.parts?.length&&<div className="production-expanded-parts"><h3>Tracked job parts</h3>{job.parts.map(part=><div className="production-expanded-part" key={part.id}><div><b>{part.code}</b><span>{part.name}</span><small>{part.description||job.description}</small></div><label><span>Location</span><select value={part.currentDepartmentId} onChange={event=>onUpdatePart(job,part,"location",event.target.value)}><option value="">Not started</option>{enabledDepartments.map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label><span>Status</span><select value={part.status} onChange={event=>onUpdatePart(job,part,"status",event.target.value)}>{enabledStatuses.map(status=><option key={status.id}>{status.name}</option>)}</select></label></div>)}</div>}<label className="production-note-editor"><span>Production note</span><textarea rows={3} maxLength={1000} value={noteDrafts[job.id]??job.notes} onChange={event=>setNoteDrafts(current=>({...current,[job.id]:event.target.value}))} placeholder="Add a production note for this job…"/><div><small>This note is shared with PlantFlow users.</small><button type="button" onClick={()=>{onUpdateJob(job,"notes",noteDrafts[job.id]??job.notes);setNoteDrafts(current=>{const next={...current};delete next[job.id];return next})}}>Save note</button></div></label><div className="production-job-actions"><button type="button" onClick={()=>onReview(job)}>Review job</button>{!job.parts?.length&&<button type="button" onClick={()=>onPrint(job)}>▥ Reprint barcode</button>}{!job.parts?.length&&<button type="button" onClick={()=>onSplit(job)}>Split job</button>}</div></div></td></tr>}</Fragment>)}{!bucket.jobs.length&&<tr><td colSpan={8}><p className="viewer-empty">No jobs match the current view. Change the department selection or search to continue.</p></td></tr>}</tbody></table></div></article>)}</section>
+      <footer className="viewer-footer">PlantFlow Production Floor Portal · Worth Higgins & Associates</footer>
+    </main>
   </div>;
 }
 
@@ -900,7 +1030,9 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
   const [scope,setScope]=useState<"active"|"starred"|"all">("active");
   const [group,setGroup]=useState<"none"|"department"|"customer"|"status"|"priority">("none");
   const [sort,setSort]=useState<"due"|"recent"|"job"|"customer"|"priority">("recent");
-  const [departmentFilter,setDepartmentFilter]=useState("");
+  const [departmentFilter,setDepartmentFilter]=useState<DepartmentSelection>(null);
+  const [summaryOpen,setSummaryOpen]=useState(false);
+  const [controlsOpen,setControlsOpen]=useState(false);
   const [starredJobs,setStarredJobs]=useState<string[]>(()=>{try{return JSON.parse(window.localStorage.getItem("plantflow-portal-starred-v1")||"[]")}catch{return []}});
   const [jobNotes,setJobNotes]=useState<Record<string,string>>(()=>{try{return JSON.parse(window.localStorage.getItem("plantflow-portal-notes-v1")||"{}")}catch{return {}}});
   const [noteJob,setNoteJob]=useState<Job|null>(null);
@@ -916,7 +1048,7 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
   const active=state.jobs.filter(job=>!jobIsClosed(job,state.statuses));
   const visibleJobs=useMemo(()=>{
     const source=scope==="active"?active:scope==="starred"?state.jobs.filter(job=>starredJobs.includes(job.id)):state.jobs;
-    const filtered=source.filter(job=>jobIsInDepartment(job,departmentFilter)&&`${job.jobNumber} ${job.customer} ${job.description} ${parentLocation(job,departmentName)} ${parentStatus(job)}`.toLowerCase().includes(search.trim().toLowerCase()));
+    const filtered=source.filter(job=>jobIsInDepartments(job,departmentFilter)&&`${job.jobNumber} ${job.customer} ${job.description} ${parentLocation(job,departmentName)} ${parentStatus(job)}`.toLowerCase().includes(search.trim().toLowerCase()));
     const priorityRank={Critical:0,Rush:1,Standard:2};
     return [...filtered].sort((a,b)=>{
       if(sort==="recent") return parentUpdatedAt(b).localeCompare(parentUpdatedAt(a));
@@ -927,7 +1059,7 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
     });
   },[state.jobs,state.statuses,scope,search,sort,starredJobs,departmentFilter]);
   const groups=useMemo(()=>{
-    if(group==="none") return [{key:"all",label:departmentFilter?`${departmentFilter==="__not_started__"?"Not started":departmentName(departmentFilter)} jobs`:scope==="active"?"All active jobs":scope==="starred"?"Starred jobs":"All job records",jobs:visibleJobs}];
+    if(group==="none") return [{key:"all",label:departmentFilter!==null?`${departmentSelectionLabel(departmentFilter,departmentName)} jobs`:scope==="active"?"All active jobs":scope==="starred"?"Starred jobs":"All job records",jobs:visibleJobs}];
     const buckets=new Map<string,Job[]>();
     visibleJobs.forEach(job=>{
       const key=group==="department"?parentLocation(job,departmentName):group==="customer"?job.customer:group==="status"?parentStatus(job):job.priority;
@@ -939,23 +1071,25 @@ export function ReadOnlyPortal({state}:{state:typeof seedState}) {
   return <div className={`viewer-portal viewer-theme-${viewerTheme}`}>
     <header className="viewer-header"><div className="viewer-brand"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><p className="eyebrow">PLANTFLOW PORTAL</p><h1>Production Information Portal</h1><span>Review current production information and follow jobs as they move through the plant.</span></div></div><div className="viewer-header-tools"><div className="viewer-theme-toggle" role="group" aria-label="Viewer color mode"><button type="button" className={viewerTheme==="classic"?"active":""} aria-pressed={viewerTheme==="classic"} onClick={()=>changeViewerTheme("classic")} title="Use light mode">Light</button><button type="button" className={viewerTheme==="graphite"?"active":""} aria-pressed={viewerTheme==="graphite"} onClick={()=>changeViewerTheme("graphite")} title="Use dark mode">Dark</button></div><div className="viewer-updated"><i/><div><b>Live production view</b><span>Updated {new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span></div></div></div></header>
     <main className="viewer-main">
-      <section className="viewer-metrics"><div><span>Active jobs</span><b>{active.length}</b></div><div><span>Due today</span><b>{active.filter(job=>job.dueDate===today).length}</b></div><div><span>Overdue</span><b>{active.filter(job=>job.dueDate<today).length}</b></div><div><span>Rush / critical</span><b>{active.filter(job=>job.priority!=="Standard").length}</b></div></section>
-      <section className="viewer-controls panel"><label className="viewer-search"><span>Find a job</span><input placeholder="Search job, customer, description, department…" value={search} onChange={event=>setSearch(event.target.value)}/></label><label><span>Records</span><select value={scope} onChange={event=>setScope(event.target.value as typeof scope)}><option value="active">Active jobs</option><option value="starred">★ Starred jobs ({starredJobs.length})</option><option value="all">All records</option></select></label><label><span>Department</span><select value={departmentFilter} onChange={event=>setDepartmentFilter(event.target.value)}><option value="">All departments</option><option value="__not_started__">Not started</option>{state.departments.filter(department=>department.enabled).map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label><span>View</span><select value={group} onChange={event=>setGroup(event.target.value as typeof group)}><option value="none">Overall view</option><option value="department">Group by department</option><option value="customer">Group by customer</option><option value="status">Group by status</option><option value="priority">Group by priority</option></select></label><label><span>Sort</span><select value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="due">Due date — soonest</option><option value="recent">Most recently moved</option><option value="priority">Priority — critical first</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></section>
-      <div className="viewer-result-note"><b>{visibleJobs.length}</b> matching {visibleJobs.length===1?"job":"jobs"}<span>Current production view · updated in real time</span><button type="button" className="viewer-report-button" onClick={()=>setPortalReportOpen(true)}>Print / PDF current view</button></div>
+      <div className="viewer-section-toggles"><button type="button" aria-expanded={summaryOpen} onClick={()=>setSummaryOpen(current=>!current)}><span>Production summary</span><small>{active.length} active · {active.filter(job=>job.dueDate===today).length} due today</small><b>{summaryOpen?"⌃":"⌄"}</b></button><button type="button" aria-expanded={controlsOpen} onClick={()=>setControlsOpen(current=>!current)}><span>Find, filter & arrange</span><small>{departmentFilter===null?"All departments":departmentSelectionLabel(departmentFilter,departmentName)}</small><b>{controlsOpen?"⌃":"⌄"}</b></button></div>
+      {summaryOpen&&<section className="viewer-metrics viewer-collapsible-section"><div><span>Active jobs</span><b>{active.length}</b></div><div><span>Due today</span><b>{active.filter(job=>job.dueDate===today).length}</b></div><div><span>Overdue</span><b>{active.filter(job=>job.dueDate<today).length}</b></div><div><span>Rush / critical</span><b>{active.filter(job=>job.priority!=="Standard").length}</b></div></section>}
+      {controlsOpen&&<section className="viewer-controls panel viewer-collapsible-section"><label className="viewer-search"><span>Find a job</span><input placeholder="Search job, customer, description, department…" value={search} onChange={event=>setSearch(event.target.value)}/></label><label><span>Records</span><select value={scope} onChange={event=>setScope(event.target.value as typeof scope)}><option value="active">Active jobs</option><option value="starred">★ Starred jobs ({starredJobs.length})</option><option value="all">All records</option></select></label><div className="control-field"><span>Departments</span><DepartmentMultiSelect departments={state.departments} value={departmentFilter} onChange={setDepartmentFilter} compact/></div><label><span>View</span><select value={group} onChange={event=>setGroup(event.target.value as typeof group)}><option value="none">Overall view</option><option value="department">Group by department</option><option value="customer">Group by customer</option><option value="status">Group by status</option><option value="priority">Group by priority</option></select></label><label><span>Sort</span><select value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="due">Due date — soonest</option><option value="recent">Most recently moved</option><option value="priority">Priority — critical first</option><option value="job">Job number</option><option value="customer">Customer name</option></select></label></section>}
+      <div className="viewer-result-note"><span className="viewer-result-count"><b>{visibleJobs.length}</b> matching {visibleJobs.length===1?"job":"jobs"}</span><span className="viewer-result-live">Current production view · updated in real time</span><button type="button" className="viewer-report-button" onClick={()=>setPortalReportOpen(true)}>Print / PDF</button></div>
       <section className="viewer-groups">{groups.map(bucket=><article className="panel viewer-group" key={bucket.key}><div className="viewer-group-head"><div><h2>{bucket.label}</h2><p>{bucket.jobs.length} {bucket.jobs.length===1?"job":"jobs"}</p></div></div><div className="viewer-table-wrap"><table className="viewer-table"><thead><tr><th className="viewer-star-column"><span className="sr-only">Favorite</span></th><th>Job</th><th>Customer / Description</th><th>Department</th><th>Status</th><th>Priority</th><th>Due</th><th>Time here</th></tr></thead><tbody>{bucket.jobs.map(job=><Fragment key={job.id}><tr className={`viewer-job-row ${deadlineTone(job.dueDate,state.settings.deadlineHighlighting)}`} tabIndex={0} onClick={()=>setNoteJob(job)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setNoteJob(job)}}}><td className="viewer-star-column"><button type="button" className={`viewer-star ${starredJobs.includes(job.id)?"selected":""}`} aria-label={starredJobs.includes(job.id)?`Remove job ${job.jobNumber} from starred jobs`:`Star job ${job.jobNumber}`} title={starredJobs.includes(job.id)?"Remove star":"Star this job"} onClick={event=>{event.stopPropagation();toggleStar(job.id)}}>★</button></td><td><strong>{job.jobNumber}</strong>{jobNotes[job.id]&&<small className="viewer-note-indicator">● Note</small>}{job.parts?.length&&<small>{job.parts.length} tracked parts</small>}</td><td><b>{job.customer}</b><small>{job.description}</small></td><td><span className="department-pill">{parentLocation(job,departmentName)}</span></td><td><span className={`status-pill ${statusTone[parentStatus(job)]||"slate"}`}>{parentStatus(job)}</span></td><td><span className={`priority-text ${job.priority.toLowerCase()}`}>{job.priority}</span></td><td>{formatDate(job.dueDate)}</td><td>{formatTrackedTime(parentUpdatedAt(job),state.settings,job.overtime)}</td></tr>{job.parts?.map(part=><tr className="viewer-part-row" key={part.id} onClick={()=>setNoteJob(job)}><td className="viewer-star-column"/><td><strong>{part.code}</strong></td><td><b>{part.name}</b><small>{part.description||job.description}{part.quantity?` · Qty ${part.quantity}`:""}</small></td><td><span className="department-pill">{departmentName(part.currentDepartmentId)}</span></td><td><span className={`status-pill ${statusTone[part.status]||"slate"}`}>{part.status}</span></td><td><span className="priority-text">Part</span></td><td>{formatDate(job.dueDate)}</td><td>{formatTrackedTime(part.updatedAt,state.settings,job.overtime)}</td></tr>)}</Fragment>)}</tbody></table>{!bucket.jobs.length&&<p className="viewer-empty">{scope==="starred"?"No starred jobs yet. Select the star beside a job to add it here.":"No jobs match the current view."}</p>}</div></article>)}</section>
       <footer className="viewer-footer">PlantFlow Production Portal · Worth Higgins & Associates</footer>
     </main>
-    {noteJob&&<PortalJobNoteDialog job={noteJob} note={jobNotes[noteJob.id]||""} department={parentLocation(noteJob,departmentName)} onClose={()=>setNoteJob(null)} onSave={note=>{saveJobNote(noteJob.id,note);setNoteJob(null)}}/>}
+    {noteJob&&<PortalJobNoteDialog job={noteJob} note={jobNotes[noteJob.id]||""} department={parentLocation(noteJob,departmentName)} departmentName={departmentName} timeHere={formatTrackedTime(parentUpdatedAt(noteJob),state.settings,noteJob.overtime)} onClose={()=>setNoteJob(null)} onSave={note=>{saveJobNote(noteJob.id,note);setNoteJob(null)}}/>}
     {portalReportOpen&&<PortalViewReport groups={groups} notes={jobNotes} departmentName={departmentName} scope={scope} search={search} sort={sort} onClose={()=>setPortalReportOpen(false)}/>} 
   </div>;
 }
 
-function PortalJobNoteDialog({job,note,department,onClose,onSave}:{job:Job;note:string;department:string;onClose:()=>void;onSave:(note:string)=>void}) {
+function PortalJobNoteDialog({job,note,department,departmentName,timeHere,onClose,onSave}:{job:Job;note:string;department:string;departmentName:(id:string)=>string;timeHere:string;onClose:()=>void;onSave:(note:string)=>void}) {
   const [draft,setDraft]=useState(note);
   return <div className="portal-note-overlay" role="dialog" aria-modal="true" aria-label={`Personal note for job ${job.jobNumber}`}>
     <div className="portal-note-card">
-      <div className="portal-note-head"><div><p className="eyebrow">MY PORTAL NOTE</p><h2>Job {job.jobNumber}</h2><span>{job.customer} · {department}</span></div><button type="button" aria-label="Close note" onClick={onClose}>×</button></div>
+      <div className="portal-note-head"><div><p className="eyebrow">MY PORTAL NOTE</p><h2>Job {job.jobNumber}</h2><span>{job.customer} · {department}</span><span className="portal-note-time">Time here: {timeHere}</span></div><button type="button" aria-label="Close note" onClick={onClose}>×</button></div>
       <p className="portal-note-description">Add a discussion point, reminder, or follow-up for this job. This note stays in this browser and does not change the production record.</p>
+      {job.parts?.length&&<div className="portal-part-details"><b>Tracked job parts</b>{job.parts.map(part=><div key={part.id}><span><strong>{part.code}</strong>{part.name}</span><span>{departmentName(part.currentDepartmentId)}</span><span>{part.status}</span></div>)}</div>}
       <label><span>Note</span><textarea autoFocus maxLength={750} rows={6} value={draft} onChange={event=>setDraft(event.target.value)} placeholder="Add a note for your next production discussion…"/></label>
       <div className="portal-note-count">{draft.length} / 750</div>
       <div className="portal-note-actions">{note&&<button type="button" className="portal-note-clear" onClick={()=>setDraft("")}>Clear note</button>}<button type="button" className="secondary" onClick={onClose}>Cancel</button><button type="button" className="primary" onClick={()=>onSave(draft)}>Save note</button></div>
@@ -1030,6 +1164,19 @@ function JobEditor({job,departments,statuses,canChangeSchedule,onClose,onSave,on
 }
 
 function StatusPrintSheet({statuses,onClose,onPrint}:{statuses:StatusDefinition[];onClose:()=>void;onPrint:()=>void}) { return <div className="status-sheet-overlay" role="dialog" aria-modal="true"><div className="status-sheet-modal"><div className="reprint-head"><div><p className="eyebrow">LAMINATED STATION COMMANDS</p><h2>Status barcode sheet</h2></div><button onClick={onClose}>×</button></div><div className="status-print-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><h1>PRODUCTION STATUS COMMANDS</h1><p>Scan a status first, then scan one job within 15 seconds.</p><div className="status-label-grid">{statuses.filter(item=>item.enabled).sort((a,b)=>a.order-b.order).map(status=><div className="status-label" key={status.id} style={{borderTopColor:status.color}}><strong>{status.name}</strong><Code128 value={`STATUS:${status.code}`}/><small>STATUS:{status.code}</small></div>)}</div></div><div className="reprint-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={onPrint}>Print Status Barcodes</button></div></div></div> }
+
+function ProductionPortalAdminCard() {
+  const [copied,setCopied]=useState(false);
+  const portalUrl=`${window.location.origin}${window.location.pathname}?view=production`;
+  const copyLink=async()=>{
+    try {
+      if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(portalUrl);
+      else {const input=document.createElement("textarea");input.value=portalUrl;input.style.position="fixed";input.style.opacity="0";document.body.appendChild(input);input.select();document.execCommand("copy");input.remove()}
+      setCopied(true);window.setTimeout(()=>setCopied(false),2000);
+    } catch {setCopied(false)}
+  };
+  return <section className="panel viewer-admin-card production-viewer-admin-card"><div className="viewer-admin-icon production" aria-hidden="true"><span>✎</span></div><div className="viewer-admin-copy"><p className="eyebrow">SECURE MOBILE PRODUCTION ACCESS</p><h2>Production Floor Portal</h2><p>A phone-friendly production and scanner view for authorized employees. Staff can scan jobs, filter the live workload, update location and status, and add shared production notes.</p><div className="viewer-link-row"><input aria-label="Production floor portal link" readOnly value={portalUrl}/><button type="button" className="secondary" onClick={copyLink}>{copied?"✓ Copied":"Copy link"}</button><a className="primary" href={portalUrl} target="_blank" rel="noreferrer"><span>Open portal</span><svg className="viewer-open-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 5 11"/></svg></a></div><div className="viewer-local-warning secure"><b>Employee sign-in required</b><span>Production Floor users enter the employee name and passcode assigned by a Super Admin.</span></div></div></section>;
+}
 
 function ViewerPortalAdminCard() {
   const [copied,setCopied]=useState(false);
@@ -1130,11 +1277,62 @@ function DailyBriefReport({state,onClose,onPrint}:{state:typeof seedState;onClos
 
 function ReportTable({title,headers,rows,rowClassName}:{title:string;headers:string[];rows:(string|number)[][];rowClassName?:(row:(string|number)[],index:number)=>string}) { return <section className="report-table"><h3>{title}</h3><table><thead><tr>{headers.map(header=><th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={index} className={rowClassName?.(row,index)||""}>{row.map((cell,cellIndex)=><td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>{!rows.length&&<p>No matching records.</p>}</section> }
 
-function Admin({departments,statuses,settings,onChangeSettings,onSave,onSaveStatuses,onPrintStatuses,onReset}:{departments:Department[];statuses:StatusDefinition[];settings:AppSettings;onChangeSettings:(settings:AppSettings)=>void;onSave:(d:Department[])=>void;onSaveStatuses:(s:StatusDefinition[])=>void;onPrintStatuses:(s:StatusDefinition[])=>void;onReset:()=>void}) {
+function ActiveJobDeleteAction({job,onDelete}:{job:Job;onDelete:(job:Job)=>void|Promise<void>}) {
+  const [open,setOpen]=useState(false);
+  const [confirmationText,setConfirmationText]=useState("");
+  const requiredText=`DELETE ${job.jobNumber}`;
+  return <div className="active-job-delete-action">
+    {!open?<button type="button" onClick={()=>setOpen(true)}>Delete job permanently</button>:<div className="data-delete-confirmation" role="dialog" aria-modal="true" aria-label={`Confirm deleting job ${job.jobNumber}`}><div><b>Permanently delete Job {job.jobNumber}?</b><span>The job, its parts, and all movement history will be removed. The job number will be available for reuse.</span><label>Type <strong>{requiredText}</strong> to continue<input autoFocus value={confirmationText} onChange={event=>setConfirmationText(event.target.value)}/></label><div><button type="button" className="secondary" onClick={()=>{setOpen(false);setConfirmationText("");}}>Cancel</button><button type="button" className="danger-button" disabled={confirmationText!==requiredText} onClick={()=>void onDelete(job)}>Delete permanently</button></div></div></div>}
+  </div>;
+}
+
+function DataMaintenancePanel({jobCount,onClearAllJobs}:{jobCount:number;onClearAllJobs:()=>void|Promise<void>}) {
+  const [confirmationOpen,setConfirmationOpen]=useState(false);
+  const [confirmationText,setConfirmationText]=useState("");
+  const requiredText="DELETE ALL JOBS";
+  const closeConfirmation=()=>{setConfirmationOpen(false);setConfirmationText("");};
+  const confirmDeletion=async()=>{if(confirmationText!==requiredText)return;await onClearAllJobs();closeConfirmation();};
+  return <section className="panel data-maintenance-panel">
+    <div>
+      <p className="eyebrow">DATA MAINTENANCE</p>
+      <h2>Job records</h2>
+      <p>Remove all jobs, parts, and movement history before launch. Departments, statuses, settings, and user accounts are preserved.</p>
+    </div>
+    <div className="data-maintenance-actions">
+      <span>{jobCount} {jobCount===1?"job":"jobs"} currently stored</span>
+      <button type="button" className="danger-button" disabled={!jobCount} onClick={()=>{setConfirmationText("");setConfirmationOpen(true);}}>Clear all job data</button>
+    </div>
+    {confirmationOpen&&<div className="data-delete-confirmation" role="dialog" aria-modal="true" aria-label="Confirm clearing all job data"><div><b>Permanently clear all job data?</b><span>Every job, job part, and movement record will be removed. Configuration and users remain.</span><label>Type <strong>{requiredText}</strong> to continue<input autoFocus value={confirmationText} onChange={event=>setConfirmationText(event.target.value)} /></label><div><button type="button" className="secondary" onClick={closeConfirmation}>Cancel</button><button type="button" className="danger-button" disabled={confirmationText!==requiredText} onClick={()=>void confirmDeletion()}>Delete permanently</button></div></div></div>}
+  </section>;
+}
+
+function Admin({departments,statuses,jobs,settings,onChangeSettings,onSave,onSaveStatuses,onPrintStatuses,onReset}:{departments:Department[];statuses:StatusDefinition[];jobs:Job[];settings:AppSettings;onChangeSettings:(settings:AppSettings)=>void;onSave:(d:Department[])=>void;onSaveStatuses:(s:StatusDefinition[])=>void;onPrintStatuses:(s:StatusDefinition[])=>void;onReset:()=>void}) {
   const [draft,setDraft]=useState(departments);
   const [statusDraft,setStatusDraft]=useState(statuses);
+  const [editorMessage,setEditorMessage]=useState("");
+  useEffect(()=>setDraft(departments),[departments]);
+  useEffect(()=>setStatusDraft(statuses),[statuses]);
   const update=(id:string,field:keyof Department,value:string|boolean)=>setDraft(draft.map(d=>d.id===id?{...d,[field]:value}:d));
   const updateStatus=(id:string,field:keyof StatusDefinition,value:string|boolean)=>setStatusDraft(current=>current.map(status=>status.id===id?{...status,[field]:value}:status));
+  const addDepartment=()=>{
+    const nextNumber=draft.length+1;
+    setDraft(current=>[...current,{id:makeId(),name:"New Department",prefix:`DEPT${nextNumber}`,enabled:true,order:Math.max(0,...current.map(item=>item.order))+1}]);
+    setEditorMessage("New department added. Update its name and scanner prefix, then save departments.");
+  };
+  const deleteDepartment=(department:Department)=>{
+    const assigned=jobs.some(job=>job.currentDepartmentId===department.id||job.parts?.some(part=>part.currentDepartmentId===department.id));
+    if(assigned){setEditorMessage(`${department.name} is currently assigned to one or more jobs. Move those jobs first, or disable the department instead.`);return;}
+    if(!window.confirm(`Delete ${department.name} from the department list? Existing scan-history text will be preserved.`))return;
+    setDraft(current=>current.filter(item=>item.id!==department.id));
+    setEditorMessage(`${department.name} removed from the draft. Click Save departments to confirm.`);
+  };
   const addStatus=()=>setStatusDraft(current=>[...current,{id:makeId(),name:"New Status",code:`STATUS_${current.length+1}`,enabled:true,order:current.length+1,color:"#64748b",closesJob:false}]);
-  return <section className="admin-workspace"><div className="admin-grid"><div className="panel"><div className="panel-head"><div><h2>Departments & scanner prefixes</h2><p>Rename, disable, or change prefixes as your workflow develops.</p></div><button className="primary small" onClick={()=>onSave(draft)}>Save departments</button></div><div className="department-editor">{[...draft].sort((a,b)=>a.order-b.order).map(d=><div key={d.id}><span className="drag">⠿</span><input value={d.name} onChange={e=>update(d.id,"name",e.target.value)}/><label className="prefix-input"><span>Prefix</span><input value={d.prefix} onChange={e=>update(d.id,"prefix",e.target.value.toUpperCase().replace(/\|/g,""))}/><b>|</b></label><label className="switch"><input type="checkbox" checked={d.enabled} onChange={e=>update(d.id,"enabled",e.target.checked)}/><span/></label></div>)}</div></div><aside className="panel settings-card"><h2>Pilot settings</h2><div className="setting time-display-setting"><div><b>Time Here display</b><small>Standard schedule: Monday–Friday, 8:00 AM–5:00 PM</small><div className="time-mode-options"><button type="button" className={settings.timeDisplayMode==="days"?"active":""} onClick={()=>onChangeSettings({...settings,timeDisplayMode:"days"})}>Business days</button><button type="button" className={settings.timeDisplayMode==="hours"?"active":""} onClick={()=>onChangeSettings({...settings,timeDisplayMode:"hours"})}>Business hours</button></div></div></div><div className="setting deadline-setting"><div><b>Deadline highlighting</b><small>Yellow within 2 days; red when overdue</small></div><label className="switch" aria-label="Toggle deadline highlighting"><input type="checkbox" checked={settings.deadlineHighlighting} onChange={e=>onChangeSettings({...settings,deadlineHighlighting:e.target.checked})}/><span/></label></div><div className="setting"><div><b>Status command window</b><small>Status applies to the next job from that department</small></div><span>15 sec</span></div><div className="setting"><div><b>Duplicate scan window</b><small>Ignore repeat scans for 30 seconds</small></div><span>30 sec</span></div><div className="setting"><div><b>Storage mode</b><small>Shared Firebase data</small></div><span>Cloud</span></div><hr/><button className="danger-button" onClick={onReset}>Restore sample data</button></aside></div><div className="panel status-admin"><div className="panel-head"><div><h2>Statuses & laminated barcode commands</h2><p>One status barcode can be printed and posted at every station. The scanner prefix identifies the department.</p></div><div className="status-admin-actions"><button className="secondary" onClick={addStatus}>+ Add status</button><button className="secondary" onClick={()=>onPrintStatuses(statusDraft)}>▥ Print barcode sheet</button><button className="primary" onClick={()=>onSaveStatuses(statusDraft)}>Save statuses</button></div></div><div className="status-editor-head"><span>Color</span><span>Status name</span><span>Barcode command</span><span>Closes job</span><span>Enabled</span><span>Print</span></div><div className="status-editor">{[...statusDraft].sort((a,b)=>a.order-b.order).map(status=><div key={status.id}><input type="color" value={status.color} onChange={e=>updateStatus(status.id,"color",e.target.value)}/><input value={status.name} onChange={e=>updateStatus(status.id,"name",e.target.value)}/><label className="status-code"><span>STATUS:</span><input value={status.code} onChange={e=>updateStatus(status.id,"code",e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,""))}/></label><label className="check-label"><input type="checkbox" checked={status.closesJob} onChange={e=>updateStatus(status.id,"closesJob",e.target.checked)}/> Yes</label><label className="switch"><input type="checkbox" checked={status.enabled} onChange={e=>updateStatus(status.id,"enabled",e.target.checked)}/><span/></label><button className="barcode-action" onClick={()=>onPrintStatuses([status])}>▥ Print</button></div>)}</div></div></section>
+  const deleteStatus=(status:StatusDefinition)=>{
+    const assigned=jobs.some(job=>job.status===status.name||job.parts?.some(part=>part.status===status.name));
+    if(assigned){setEditorMessage(`${status.name} is currently assigned to one or more jobs. Change those jobs first, or disable the status instead.`);return;}
+    if(!window.confirm(`Delete the ${status.name} status and its barcode command?`))return;
+    setStatusDraft(current=>current.filter(item=>item.id!==status.id));
+    setEditorMessage(`${status.name} removed from the draft. Click Save statuses to confirm.`);
+  };
+  return <section className="admin-workspace">{editorMessage&&<div className="admin-editor-message" role="status"><span>{editorMessage}</span><button type="button" aria-label="Dismiss message" onClick={()=>setEditorMessage("")}>×</button></div>}<div className="admin-grid"><div className="panel"><div className="panel-head"><div><h2>Departments & scanner prefixes</h2><p>Add, rename, disable, or remove departments as your workflow develops.</p></div><div className="department-admin-actions"><button className="secondary" onClick={addDepartment}>+ Add department</button><button className="primary small" onClick={()=>onSave(draft)}>Save departments</button></div></div><div className="department-editor">{[...draft].sort((a,b)=>a.order-b.order).map(d=><div key={d.id}><span className="drag">⠿</span><input aria-label="Department name" value={d.name} onChange={e=>update(d.id,"name",e.target.value)}/><label className="prefix-input"><span>Prefix</span><input aria-label={`Scanner prefix for ${d.name}`} value={d.prefix} onChange={e=>update(d.id,"prefix",e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g,""))}/><b>|</b></label><label className="switch" aria-label={`${d.enabled?"Disable":"Enable"} ${d.name}`}><input type="checkbox" checked={d.enabled} onChange={e=>update(d.id,"enabled",e.target.checked)}/><span/></label><button type="button" className="editor-delete-button" onClick={()=>deleteDepartment(d)}>Delete</button></div>)}</div></div><aside className="panel settings-card"><h2>Pilot settings</h2><div className="setting time-display-setting"><div><b>Time Here display</b><small>Standard schedule: Monday–Friday, 8:00 AM–5:00 PM</small><div className="time-mode-options"><button type="button" className={settings.timeDisplayMode==="days"?"active":""} onClick={()=>onChangeSettings({...settings,timeDisplayMode:"days"})}>Business days</button><button type="button" className={settings.timeDisplayMode==="hours"?"active":""} onClick={()=>onChangeSettings({...settings,timeDisplayMode:"hours"})}>Business hours</button></div></div></div><div className="setting deadline-setting"><div><b>Deadline highlighting</b><small>Yellow within 2 days; red when overdue</small></div><label className="switch" aria-label="Toggle deadline highlighting"><input type="checkbox" checked={settings.deadlineHighlighting} onChange={e=>onChangeSettings({...settings,deadlineHighlighting:e.target.checked})}/><span/></label></div><div className="setting"><div><b>Status command window</b><small>Status applies to the next job from that department</small></div><span>15 sec</span></div><div className="setting"><div><b>Duplicate scan window</b><small>Ignore repeat scans for 30 seconds</small></div><span>30 sec</span></div><div className="setting"><div><b>Storage mode</b><small>Shared Firebase data</small></div><span>Cloud</span></div><hr/><button className="danger-button" onClick={onReset}>Restore sample data</button></aside></div><div className="panel status-admin"><div className="panel-head"><div><h2>Statuses & laminated barcode commands</h2><p>Add, edit, disable, or remove status commands. One barcode sheet can be posted at every station.</p></div><div className="status-admin-actions"><button className="secondary" onClick={addStatus}>+ Add status</button><button className="secondary" onClick={()=>onPrintStatuses(statusDraft)}>▥ Print barcode sheet</button><button className="primary" onClick={()=>onSaveStatuses(statusDraft)}>Save statuses</button></div></div><div className="status-editor-head"><span>Color</span><span>Status name</span><span>Barcode command</span><span>Closes job</span><span>Enabled</span><span>Print</span><span>Remove</span></div><div className="status-editor">{[...statusDraft].sort((a,b)=>a.order-b.order).map(status=><div key={status.id}><input type="color" value={status.color} onChange={e=>updateStatus(status.id,"color",e.target.value)}/><input value={status.name} onChange={e=>updateStatus(status.id,"name",e.target.value)}/><label className="status-code"><span>STATUS:</span><input value={status.code} onChange={e=>updateStatus(status.id,"code",e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,""))}/></label><label className="check-label"><input type="checkbox" checked={status.closesJob} onChange={e=>updateStatus(status.id,"closesJob",e.target.checked)}/> Yes</label><label className="switch"><input type="checkbox" checked={status.enabled} onChange={e=>updateStatus(status.id,"enabled",e.target.checked)}/><span/></label><button className="barcode-action" onClick={()=>onPrintStatuses([status])}>▥ Print</button><button type="button" className="editor-delete-button" onClick={()=>deleteStatus(status)}>Delete</button></div>)}</div></div></section>
 }

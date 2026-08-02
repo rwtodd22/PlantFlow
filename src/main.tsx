@@ -7,9 +7,10 @@ import "./index.css";
 import "./label.css";
 
 const publicViewer = new URLSearchParams(window.location.search).get("view") === "portal";
+const productionViewer = new URLSearchParams(window.location.search).get("view") === "production";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {publicViewer ? <PublicViewer/> : <AuthGate><App /></AuthGate>}
+    {publicViewer ? <PublicViewer/> : <AuthGate access={productionViewer ? "production" : "main"}><App /></AuthGate>}
   </React.StrictMode>,
 );

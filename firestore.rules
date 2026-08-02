@@ -47,9 +47,12 @@ service cloud.firestore {
 
     match /jobs/{jobId} {
       allow read: if canView();
-      allow create, delete: if canManageProduction();
+      allow create, delete: if hasRole(['super_admin', 'admin', 'manager']);
       allow update: if canManageProduction()
-        && (!hasRole(['standard']) || request.resource.data.dueDate == resource.data.dueDate);
+        && (!hasRole(['standard']) || (
+          request.resource.data.dueDate == resource.data.dueDate
+          && request.resource.data.priority == resource.data.priority
+        ));
     }
 
     match /scanEvents/{eventId} {
@@ -65,7 +68,12 @@ service cloud.firestore {
 
     match /publicJobs/{jobId} {
       allow read: if true;
-      allow write: if canManageProduction();
+      allow create, delete: if hasRole(['super_admin', 'admin', 'manager']);
+      allow update: if canManageProduction()
+        && (!hasRole(['standard']) || (
+          request.resource.data.dueDate == resource.data.dueDate
+          && request.resource.data.priority == resource.data.priority
+        ));
     }
   }
 }

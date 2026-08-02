@@ -1,4 +1,4 @@
-import { Unsubscribe, collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, writeBatch } from "firebase/firestore";
+import { DocumentReference, Unsubscribe, collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, where, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
 
@@ -11,6 +11,22 @@ const LIVE_SCAN_LIMIT = 300;
 const HISTORY_PAGE_SIZE = 250;
 
 type Configuration = Pick<AppState, "departments" | "statuses" | "settings">;
+
+async function deleteDocumentsInBatches(documents: Array<{ ref: DocumentReference }>) {
+  for (let index = 0; index < documents.length; index += 450) {
+    const batch = writeBatch(db);
+    documents.slice(index, index + 450).forEach(item => batch.delete(item.ref));
+    await batch.commit();
+  }
+}
+
+async function clearCollection(collectionReference: typeof jobsCollection) {
+  while (true) {
+    const snapshot = await getDocs(query(collectionReference, limit(450)));
+    if (snapshot.empty) return;
+    await deleteDocumentsInBatches(snapshot.docs);
+  }
+}
 
 /**
  * Firestore rejects `undefined` anywhere in a document. Optional application
@@ -64,6 +80,22 @@ function isClosed(job: Job, state: AppState) {
 }
 
 export const cloudDataService = {
+  async deleteJobPermanently(job: Job) {
+    const identifiers = [job.jobNumber, ...(job.parts || []).map(part => part.code)];
+    const scanSnapshot = await getDocs(query(scansCollection, where("jobNumber", "in", identifiers)));
+    await deleteDocumentsInBatches([
+      { ref: doc(jobsCollection, job.id) },
+      { ref: doc(publicJobsCollection, job.id) },
+      ...scanSnapshot.docs,
+    ]);
+  },
+
+  async clearAllJobData() {
+    await clearCollection(scansCollection);
+    await clearCollection(publicJobsCollection);
+    await clearCollection(jobsCollection);
+  },
+
   subscribe(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {
     let configuration: Configuration | null = null;
     let jobs: Job[] = [];
