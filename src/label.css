@@ -1165,7 +1165,7 @@ tr.deadline-overdue .status-pill.green {
 .viewer-local-warning { display: flex; gap: 8px; margin-top: 11px; padding: 9px 11px; border-radius: 8px; background: #fff7e6; color: #78551d; font-size: 10.5px; line-height: 1.4; }
 .viewer-local-warning b { white-space: nowrap; }
 
-.viewer-portal { min-height: 100vh; background: radial-gradient(circle at 85% 0,rgba(151,111,84,.075),transparent 28%),#f3f7f5; }
+.viewer-portal { display: flex; min-height: 100vh; flex-direction: column; background: radial-gradient(circle at 85% 0,rgba(151,111,84,.075),transparent 28%),#f3f7f5; }
 .viewer-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 30px; margin: 0; padding: 28px clamp(22px,4vw,62px); border-top: 4px solid #987057; border-bottom: 1px solid #d5e2dc; background: linear-gradient(112deg,#fff 0%,#fbfdfc 67%,#f1f7f4 100%); box-shadow: 0 5px 22px rgba(19,56,43,.045); }
 .viewer-brand { display: flex; align-items: center; gap: 22px; min-width: 0; }
 .viewer-brand img { width: 245px; height: 58px; padding-right: 21px; border-right: 1px solid #dce6e1; object-fit: contain; }
@@ -1177,7 +1177,7 @@ tr.deadline-overdue .status-pill.green {
 .viewer-updated b,.viewer-updated span { display: block; }
 .viewer-updated b { font-size: 10px; }
 .viewer-updated span { margin-top: 2px; color: #718079; font-size: 9px; }
-.viewer-portal .viewer-main { max-width: 1580px; margin: 0 auto; padding: 25px clamp(18px,4vw,54px) 38px; font-size: 14px; }
+.viewer-portal .viewer-main { display: flex; width: 100%; max-width: 1580px; margin: 0 auto; padding: 25px clamp(18px,4vw,54px) 38px; flex: 1; flex-direction: column; font-size: 14px; }
 .viewer-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-bottom: 14px; }
 .viewer-metrics > div { position: relative; display: flex; align-items: center; justify-content: space-between; overflow: hidden; padding: 17px 18px; border: 1px solid #dce6e1; border-radius: 11px; background: #fff; box-shadow: 0 4px 15px rgba(19,56,43,.045); }
 .viewer-metrics > div::before { position: absolute; top: 0; bottom: 0; left: 0; width: 3px; background: #86aa9c; content: ""; }
@@ -1230,7 +1230,10 @@ tr.deadline-overdue .status-pill.green {
 .viewer-report-button { margin-left: 10px; padding: 7px 10px; border: 1px solid #c8d8d1; border-radius: 7px; background: #fff; color: #245f4c; font-size: 10px; font-weight: 800; }
 .viewer-report-button:hover { border-color: #86aa9c; background: #f5faf7; }
 .viewer-empty { padding: 28px; color: #718079; text-align: center; }
-.viewer-footer { margin-top: 8px; padding: 22px 0 0; border-top: 1px solid #dde7e2; color: #71827a; font-size: 10px; letter-spacing: .25px; text-align: center; }
+.viewer-footer { margin-top: auto; padding: 22px 0 0; border-top: 1px solid #dde7e2; color: #71827a; font-size: 10px; letter-spacing: .25px; text-align: center; }
+.portal-session-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 28px; }
+.portal-session-footer > span { text-align: left; }
+.portal-session-actions { display: flex; align-items: center; gap: 9px; }
 
 /* Viewer themes are intentionally isolated from the signed-in PlantFlow workspace. */
 .viewer-portal {
@@ -3963,7 +3966,7 @@ tr.deadline-overdue .status-pill.green {
 }
 
 /* Compact production actions. */
-.production-scanner-status { position: fixed; z-index: 80; bottom: 13px; left: 13px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--viewer-border,#cfe0d8); border-radius: 999px; padding: 7px 10px; background: var(--viewer-panel,#fff); color: var(--viewer-muted,#557168); box-shadow: 0 5px 18px rgba(15,45,35,.12); font-size: 8.5px; font-weight: 800; }
+.production-scanner-status { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--viewer-border,#cfe0d8); border-radius: 999px; padding: 6px 9px; background: var(--viewer-panel,#fff); color: var(--viewer-muted,#557168); box-shadow: none; font-size: 8.5px; font-weight: 800; }
 .production-scanner-status i { width: 7px; height: 7px; border-radius: 50%; background: #58c777; box-shadow: 0 0 0 3px #58c77722; }
 .production-job-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; padding-top: 2px; }
 .production-job-actions button { min-height: 34px; border: 1px solid var(--viewer-border); border-radius: 7px; padding: 7px 10px; background: var(--viewer-panel); color: var(--viewer-accent); font-size: 9px; font-weight: 850; }
@@ -3980,5 +3983,5 @@ tr.deadline-overdue .status-pill.green {
 
 @media (max-width: 520px) {
   .production-job-actions { grid-template-columns: 1fr; }
-  .production-scanner-status { bottom: 10px; left: 10px; }
+  .portal-session-footer { align-items: flex-start; flex-direction: column; }
 }
