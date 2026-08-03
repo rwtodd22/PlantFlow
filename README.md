@@ -27,6 +27,7 @@ Open `http://127.0.0.1:3000/`.
 ## Account access
 
 - Super Admin and Admin accounts use Firebase email/password sign-in and can open the main PlantFlow workspace.
+- Super Admin and Admin accounts can also open the Production Floor Portal using their administrator email and the same assigned PlantFlow password.
 - Only Super Admins can create, disable, restore, or remove accounts.
 - Production Floor accounts cannot open the main workspace. They use the Production Floor Portal link with the employee name and passcode assigned during account creation.
 - Production Floor sessions use persistent Firebase authentication and remain active during a shift. After 12 hours without activity, the employee must sign in again.

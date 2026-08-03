@@ -39,7 +39,7 @@ export function usePlantFlowAuth() {
 
 function friendlyAuthError(error: unknown, access: "main" | "production") {
   const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
-  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return access === "production" ? "That employee name or passcode was not recognized." : "That email or password was not recognized.";
+  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return access === "production" ? "That employee name, administrator email, or passcode was not recognized." : "That email or password was not recognized.";
   if (code.includes("too-many-requests")) return "Too many attempts. Wait a few minutes and try again.";
   if (code.includes("network-request-failed")) return "PlantFlow could not reach Firebase. Check your internet connection.";
   if (error instanceof Error && error.message === "Enter your employee name.") return error.message;
@@ -136,7 +136,8 @@ function LoginScreen({ access, sessionError }: { access: "main" | "production"; 
     setSubmitting(true);
     setError("");
     try {
-      const email = access === "production" ? productionEmailForName(identifier) : identifier.trim().toLowerCase();
+      const normalizedIdentifier = identifier.trim().toLowerCase();
+      const email = access === "production" && !normalizedIdentifier.includes("@") ? productionEmailForName(identifier) : normalizedIdentifier;
       if (!email) throw new Error("Enter your employee name.");
       await setPersistence(auth, browserLocalPersistence);
       await signInWithEmailAndPassword(auth, email, password);
@@ -152,14 +153,14 @@ function LoginScreen({ access, sessionError }: { access: "main" | "production"; 
       <img src={worthHigginsLogo} alt="Worth Higgins & Associates"/>
       <p className="eyebrow">{access === "production" ? "PRODUCTION FLOOR ACCESS" : "SECURE ADMINISTRATIVE ACCESS"}</p>
       <h1>{access === "production" ? "Open the Production Floor Portal" : "Sign in to PlantFlow"}</h1>
-      <p className="auth-intro">{access === "production" ? "Enter the employee name and passcode assigned by a PlantFlow administrator." : "Administrator accounts provide access to the full PlantFlow production workspace."}</p>
+      <p className="auth-intro">{access === "production" ? "Production employees enter their assigned name and passcode. Administrators can enter their admin email and PlantFlow password." : "Administrator accounts provide access to the full PlantFlow production workspace."}</p>
       <form onSubmit={submit}>
-        <label><span>{access === "production" ? "Employee name" : "Email address"}</span><input autoComplete="username" type={access === "production" ? "text" : "email"} required value={identifier} onChange={event => setIdentifier(event.target.value)} placeholder={access === "production" ? "Enter your assigned name" : "name@worthhiggins.com"}/></label>
+        <label><span>{access === "production" ? "Employee name or admin email" : "Email address"}</span><input autoComplete="username" type={access === "production" ? "text" : "email"} required value={identifier} onChange={event => setIdentifier(event.target.value)} placeholder={access === "production" ? "Employee name or admin email" : "name@worthhiggins.com"}/></label>
         <label><span>{access === "production" ? "Passcode" : "Password"}</span><input autoComplete="current-password" type="password" required value={password} onChange={event => setPassword(event.target.value)} placeholder={access === "production" ? "Enter your passcode" : "Enter your password"}/></label>
         {error && <div className="auth-error" role="alert">{error}</div>}
         <button className="primary" disabled={submitting}>{submitting ? "Signing in…" : access === "production" ? "Open production portal" : "Sign in"}</button>
       </form>
-      <small className="auth-help">{access === "production" ? "Your session remains available during the workday and expires after 12 hours without activity." : "Accounts are managed by a PlantFlow Super Admin."}</small>
+      <small className="auth-help">{access === "production" ? "Production employee sessions expire after 12 hours without activity. Administrator access uses the administrator’s existing PlantFlow credentials." : "Accounts are managed by a PlantFlow Super Admin."}</small>
     </main>
   </div>;
 }
