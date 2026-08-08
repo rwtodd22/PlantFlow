@@ -2790,6 +2790,14 @@ tr.deadline-overdue .status-pill.green {
   font-size: 14px;
 }
 
+.job-form .create-schedule-field select,
+.job-form .create-location-field select {
+  height: 54px;
+  min-height: 54px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .job-form .form-grid input[type="date"] {
   cursor: pointer;
   color-scheme: light;
@@ -2884,7 +2892,8 @@ tr.deadline-overdue .status-pill.green {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 48px;
+  height: 54px;
+  min-height: 54px;
   padding: 0 14px;
   border: 1px solid #cbd8d3;
   border-radius: 10px;
@@ -2892,7 +2901,17 @@ tr.deadline-overdue .status-pill.green {
   color: #14231e;
   font: inherit;
   font-size: 14px;
+  font-weight: 600;
   text-align: left;
+}
+
+.job-form .calendar-trigger > span {
+  min-height: 0;
+  margin: 0;
+  color: #14231e;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .calendar-trigger:hover,
@@ -3425,8 +3444,103 @@ tr.deadline-overdue .status-pill.green {
 }
 
 .form-grid select[name="initialDepartmentId"] {
-  width: min(100%, 300px);
-  font-size: 13px;
+  width: min(100%, 380px);
+  font-size: 14px;
+}
+
+.job-created-confirmation {
+  position: fixed;
+  z-index: 4200;
+  top: 22px;
+  right: 24px;
+  display: grid;
+  grid-template-columns: 42px minmax(190px, 1fr) 24px;
+  gap: 11px;
+  align-items: center;
+  width: min(390px, calc(100vw - 32px));
+  overflow: hidden;
+  padding: 15px 14px 17px;
+  border: 1px solid #aad5c1;
+  border-radius: 13px;
+  background: #f5fcf8;
+  color: #17382d;
+  box-shadow: 0 18px 46px rgba(12, 58, 42, .2);
+  animation: job-created-arrive .24s ease-out;
+}
+
+.job-created-check {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: #187554;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 0 0 0 5px rgba(24, 117, 84, .1);
+}
+
+.job-created-confirmation small,
+.job-created-confirmation strong,
+.job-created-confirmation p {
+  display: block;
+}
+
+.job-created-confirmation small {
+  color: #4f7567;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+.job-created-confirmation strong {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.job-created-confirmation p {
+  margin-top: 3px;
+  color: #61786f;
+  font-size: 10px;
+}
+
+.job-created-confirmation > button {
+  align-self: start;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #678078;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.job-created-confirmation > i {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #278261;
+  transform-origin: left;
+  animation: job-created-progress 1.6s ease-out forwards;
+}
+
+@keyframes job-created-arrive {
+  from { opacity: 0; transform: translateY(-10px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes job-created-progress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (max-width: 620px) {
+  .job-created-confirmation {
+    top: 12px;
+    right: 12px;
+  }
 }
 
 .user-invite-card input:focus,
@@ -3984,4 +4098,736 @@ tr.deadline-overdue .status-pill.green {
 @media (max-width: 520px) {
   .production-job-actions { grid-template-columns: 1fr; }
   .portal-session-footer { align-items: flex-start; flex-direction: column; }
+}
+
+/* Main PlantFlow workspace theme. Light mode remains the original design. */
+.main-theme-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #d5dfda;
+  border-radius: 8px;
+  background: #edf2ef;
+}
+
+.main-theme-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: transparent;
+  color: #718079;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.main-theme-toggle button.active {
+  background: #fff;
+  color: #1c5f49;
+  box-shadow: 0 1px 5px rgba(18, 50, 39, .12);
+}
+
+.main-theme-toggle svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.app-theme-dark {
+  --ink: #eef2f3;
+  --muted: #aab4ba;
+  --line: #3a444c;
+  --paper: #242a30;
+  --wash: #171b20;
+  --green: #73b79f;
+  --green2: #79c2a7;
+  --mint: #263e36;
+  --amber: #e0ad63;
+  --red: #e17c76;
+  --blue: #7eb4cb;
+  min-height: 100vh;
+  background: #171b20;
+  color: #eef2f3;
+  color-scheme: dark;
+}
+
+.app-theme-dark > main {
+  background: #171b20;
+}
+
+.app-theme-dark h1,
+.app-theme-dark h2,
+.app-theme-dark h3,
+.app-theme-dark strong,
+.app-theme-dark b,
+.app-theme-dark legend,
+.app-theme-dark label {
+  color: #eef2f3;
+}
+
+.app-theme-dark .eyebrow,
+.app-theme-dark .text-button,
+.app-theme-dark .job-num,
+.app-theme-dark .history-row b,
+.app-theme-dark .part-code b {
+  color: #79c2a7;
+}
+
+.app-theme-dark .panel,
+.app-theme-dark .metric,
+.app-theme-dark .job-group,
+.app-theme-dark .job-editor,
+.app-theme-dark .reprint-modal,
+.app-theme-dark .report-modal,
+.app-theme-dark .status-sheet-modal,
+.app-theme-dark .data-delete-confirmation > div,
+.app-theme-dark .migration-card {
+  border-color: #39434b;
+  background: #242a30;
+  color: #eef2f3;
+  box-shadow: 0 5px 22px rgba(0,0,0,.2);
+}
+
+.app-theme-dark .panel-head p,
+.app-theme-dark .group-heading p,
+.app-theme-dark .scanner-hero > p,
+.app-theme-dark .label-preview > p,
+.app-theme-dark fieldset > p,
+.app-theme-dark td small,
+.app-theme-dark .field-help,
+.app-theme-dark .split-note,
+.app-theme-dark .editor-head p,
+.app-theme-dark .editor-grid small,
+.app-theme-dark .setting small,
+.app-theme-dark .user-access-heading p,
+.app-theme-dark .user-directory-head p,
+.app-theme-dark .viewer-admin-copy > p:not(.eyebrow) {
+  color: #aab4ba;
+}
+
+.app-theme-dark .metric {
+  border-color: #39434b;
+}
+
+.app-theme-dark .metric p,
+.app-theme-dark .metric small {
+  color: #aab4ba;
+}
+
+.app-theme-dark .metric > span,
+.app-theme-dark .live-pill,
+.app-theme-dark .count-pill {
+  background: #293b42;
+}
+
+.app-theme-dark .date-chip,
+.app-theme-dark .signout-button,
+.app-theme-dark .secondary,
+.app-theme-dark .fullscreen-toggle,
+.app-theme-dark .controls-toggle,
+.app-theme-dark .table-actions-toggle,
+.app-theme-dark .barcode-action,
+.app-theme-dark .billing-note-button,
+.app-theme-dark .add-create-part,
+.app-theme-dark .add-part-button {
+  border-color: #46525a;
+  background: #292f35;
+  color: #d8e1e4;
+  box-shadow: none;
+}
+
+.app-theme-dark .secondary:hover,
+.app-theme-dark .signout-button:hover,
+.app-theme-dark .fullscreen-toggle:hover,
+.app-theme-dark .controls-toggle:hover,
+.app-theme-dark .table-actions-toggle:hover {
+  border-color: #73b79f;
+  background: #303a3d;
+  color: #8bd0b7;
+}
+
+.app-theme-dark .main-theme-toggle {
+  border-color: #3c474e;
+  background: #20262b;
+}
+
+.app-theme-dark .main-theme-toggle button {
+  color: #8f9aa0;
+}
+
+.app-theme-dark .main-theme-toggle button.active {
+  background: #343b42;
+  color: #f0f3f4;
+  box-shadow: 0 1px 5px rgba(0,0,0,.35);
+}
+
+.app-theme-dark .user-chip {
+  border-right-color: #3a444b;
+}
+
+.app-theme-dark .user-chip span,
+.app-theme-dark .date-chip {
+  color: #aab4ba;
+}
+
+.app-theme-dark table th,
+.app-theme-dark .job-table th,
+.app-theme-dark .ready-billing-table th,
+.app-theme-dark .status-editor-head {
+  border-color: #3a444c;
+  background: #20262b;
+  color: #9ba6ac;
+}
+
+.app-theme-dark table td,
+.app-theme-dark .history-row,
+.app-theme-dark .scan-item,
+.app-theme-dark .department-editor > div,
+.app-theme-dark .status-editor > div,
+.app-theme-dark .setting {
+  border-color: #353f46;
+}
+
+.app-theme-dark table td {
+  background: #242a30;
+  color: #e8edef;
+}
+
+.app-theme-dark tr.deadline-soon td {
+  border-color: #665b35;
+  background: #3b361f;
+}
+
+.app-theme-dark tr.deadline-overdue td {
+  border-color: #6d4245;
+  background: #42292c;
+}
+
+.app-theme-dark .department-pill,
+.app-theme-dark .status-pill.slate,
+.app-theme-dark .route-num,
+.app-theme-dark .setting > span {
+  background: #303a38;
+  color: #dce6e2;
+}
+
+.app-theme-dark .status-pill.blue { background: #273e4a; color: #91c5d9; }
+.app-theme-dark .status-pill.amber,
+.app-theme-dark .status-pill.orange { background: #44351f; color: #edbc75; }
+.app-theme-dark .status-pill.red { background: #482a2d; color: #ee9690; }
+.app-theme-dark .status-pill.green { background: #263e35; color: #88ceb3; }
+
+.app-theme-dark input:not([type="checkbox"]):not([type="radio"]),
+.app-theme-dark select,
+.app-theme-dark textarea,
+.app-theme-dark .calendar-trigger,
+.app-theme-dark .department-multi-trigger,
+.app-theme-dark .prefix-input {
+  border-color: #46525a;
+  background: #1d2328;
+  color: #edf1f2;
+}
+
+/* The create-job form uses intentionally stronger light-mode selectors. Keep
+   the dark override equally specific so native selects and notes do not flash
+   as white islands while leaving the light theme untouched. */
+.app-theme-dark .job-form .form-grid input:not([type="checkbox"]):not([type="radio"]),
+.app-theme-dark .job-form .form-grid select,
+.app-theme-dark .job-form .form-grid textarea {
+  border-color: #46525a;
+  background: #1d2328;
+  color: #edf1f2;
+}
+
+.app-theme-dark .job-form .form-grid input[type="date"] {
+  color-scheme: dark;
+}
+
+.app-theme-dark .job-form fieldset legend {
+  background: #242a30;
+  color: #d8e0e3;
+}
+
+.app-theme-dark input::placeholder,
+.app-theme-dark textarea::placeholder {
+  color: #7f8a90;
+}
+
+.app-theme-dark input:focus,
+.app-theme-dark select:focus,
+.app-theme-dark textarea:focus,
+.app-theme-dark .calendar-trigger.open,
+.app-theme-dark .department-multi.open .department-multi-trigger {
+  border-color: #73b79f;
+  outline-color: rgba(115,183,159,.18);
+  box-shadow: 0 0 0 3px rgba(115,183,159,.13);
+}
+
+.app-theme-dark option {
+  background: #242a30;
+  color: #edf1f2;
+}
+
+.app-theme-dark .job-form .form-grid > label > span,
+.app-theme-dark .job-form fieldset legend,
+.app-theme-dark .calendar-trigger > span,
+.app-theme-dark .editor-grid label > span,
+.app-theme-dark .job-controls label > span,
+.app-theme-dark .control-field > span {
+  color: #d8e0e3;
+}
+
+.app-theme-dark .job-form .form-grid > label > span small,
+.app-theme-dark .job-form .field-help {
+  color: #95a1a6;
+}
+
+.app-theme-dark .calendar-popover,
+.app-theme-dark .department-multi-menu {
+  border-color: #46525a;
+  background: #242a30;
+  color: #edf1f2;
+  box-shadow: 0 18px 46px rgba(0,0,0,.42);
+}
+
+.app-theme-dark .calendar-head button,
+.app-theme-dark .department-multi-actions,
+.app-theme-dark .department-multi-footer {
+  border-color: #3d484f;
+  background: #30363c;
+  color: #8ed0b8;
+}
+
+.app-theme-dark .calendar-days button {
+  color: #dce2e4;
+}
+
+.app-theme-dark .calendar-days button.outside,
+.app-theme-dark .calendar-weekdays span {
+  color: #818d93;
+}
+
+.app-theme-dark .calendar-days button:hover:not(:disabled):not(.selected),
+.app-theme-dark .department-multi-options label:hover {
+  background: #314039;
+  color: #9ad6bf;
+}
+
+.app-theme-dark .calendar-days button.selected {
+  background: #4a9b7e;
+  color: #fff;
+}
+
+.app-theme-dark .job-controls,
+.app-theme-dark .group-heading,
+.app-theme-dark .editor-head,
+.app-theme-dark .editor-summary,
+.app-theme-dark .reprint-head,
+.app-theme-dark .reprint-actions,
+.app-theme-dark .ready-billing-actions,
+.app-theme-dark .ready-billing-body,
+.app-theme-dark .user-invite-card,
+.app-theme-dark .user-directory,
+.app-theme-dark .reports-backup,
+.app-theme-dark .settings-card,
+.app-theme-dark .data-maintenance-panel {
+  border-color: #39434b;
+  background: #242a30;
+  color: #e9edef;
+}
+
+.app-theme-dark .route-options > label,
+.app-theme-dark .overtime-create-option,
+.app-theme-dark .create-split-section,
+.app-theme-dark .create-part-row,
+.app-theme-dark .split-part-card,
+.app-theme-dark .split-guidance,
+.app-theme-dark .billing-note-editor,
+.app-theme-dark .ready-billing-empty,
+.app-theme-dark .ready-billing-filter-empty {
+  border-color: #3d484f;
+  background: #20262b;
+  color: #dce3e5;
+}
+
+.app-theme-dark .route-options > label:hover,
+.app-theme-dark .create-split-section.open {
+  border-color: #588a77;
+  background: #26332f;
+}
+
+.app-theme-dark .paper-label,
+.app-theme-dark .reprint-sheet,
+.app-theme-dark .management-report,
+.app-theme-dark .status-print-sheet,
+.app-theme-dark .portal-print-sheet {
+  border-color: #aebbb5;
+  background: #fff;
+  color: #14231e;
+  color-scheme: light;
+}
+
+.app-theme-dark .paper-label *,
+.app-theme-dark .reprint-sheet *,
+.app-theme-dark .management-report *,
+.app-theme-dark .status-print-sheet *,
+.app-theme-dark .portal-print-sheet * {
+  color: inherit;
+}
+
+.app-theme-dark .barcode-placeholder {
+  border-color: #4a555c;
+  background: #20262b;
+  color: #89959a;
+}
+
+.app-theme-dark .notice.success {
+  border-color: #35664f;
+  background: #20382f;
+  color: #d8eee5;
+}
+
+.app-theme-dark .notice.error {
+  border-color: #704447;
+  background: #422a2d;
+  color: #f2d9d7;
+}
+
+.app-theme-dark .notice.duplicate,
+.app-theme-dark .cloud-warning {
+  border-color: #675a34;
+  background: #3b351f;
+  color: #eddbb1;
+}
+
+.app-theme-dark .job-created-confirmation {
+  border-color: #3f765f;
+  background: #20362e;
+  color: #e7f3ee;
+}
+
+.app-theme-dark .ready-billing-toggle,
+.app-theme-dark .report-cards.backup-grid .backup-card,
+.app-theme-dark .user-actions button,
+.app-theme-dark .time-mode-options button:not(.active) {
+  border-color: #39434b;
+  background: #242a30;
+  color: #d8e0e3;
+}
+
+.app-theme-dark .ready-billing-toggle:hover,
+.app-theme-dark .report-cards.backup-grid .backup-card:hover,
+.app-theme-dark .user-actions button:hover,
+.app-theme-dark .time-mode-options button:not(.active):hover {
+  border-color: #58666f;
+  background: #2b3339;
+}
+
+.app-theme-dark .status-code input {
+  border-color: #46525a;
+  background: #1d2328 !important;
+  color: #edf1f2;
+}
+
+/* Administration: each of these surfaces has a deliberately light visual
+   treatment in the default theme, so give it an explicit slate counterpart. */
+.app-theme-dark .primary {
+  border-color: #347c64;
+  background: #347c64;
+  color: #fff;
+}
+
+.app-theme-dark .primary:hover:not(:disabled) {
+  border-color: #409276;
+  background: #409276;
+}
+
+.app-theme-dark .ready-billing-folder {
+  background: #453720;
+  color: #efbd72;
+}
+
+.app-theme-dark .ready-billing-toggle em {
+  background: #263e35;
+  color: #8fd0b6;
+}
+
+.app-theme-dark .billing-retention-setting,
+.app-theme-dark .ready-billing-note {
+  border-color: #3d484f;
+  background: #20262b;
+  color: #e9edef;
+}
+
+.app-theme-dark .billing-retention-setting small,
+.app-theme-dark .ready-billing-note small,
+.app-theme-dark .ready-billing-note p {
+  color: #aab5ba;
+}
+
+.app-theme-dark .report-cards button,
+.app-theme-dark .report-cards .daily-card,
+.app-theme-dark .report-cards.featured-report .daily-card {
+  border-color: #3d484f;
+  background: #20262b;
+  background-image: none;
+  color: #edf1f2;
+}
+
+.app-theme-dark .report-cards button:hover,
+.app-theme-dark .report-cards .daily-card:hover {
+  border-color: #587067;
+  background: #28312f;
+}
+
+.app-theme-dark .report-cards button b,
+.app-theme-dark .report-cards button div,
+.app-theme-dark .report-cards button strong {
+  color: #edf1f2;
+}
+
+.app-theme-dark .report-cards button small,
+.app-theme-dark .report-note {
+  color: #aab5ba;
+}
+
+.app-theme-dark .report-cards button em {
+  color: #86cbb1;
+}
+
+.app-theme-dark .report-cards button > span {
+  background: #2d403a;
+  color: #a7d7c5;
+}
+
+.app-theme-dark .report-cards .daily-card > span {
+  background: #347c64;
+  color: #fff;
+}
+
+.app-theme-dark .supporting-reports {
+  border-top-color: #3d484f;
+}
+
+.app-theme-dark .backup-zone {
+  border-color: #3b454c;
+  background: #1e2429;
+  color: #e9edef;
+}
+
+.app-theme-dark .backup-zone-heading > span {
+  background: #30383e;
+  color: #bdc7cb;
+}
+
+.app-theme-dark .user-count {
+  border-color: #3c484f;
+  background: #20272c;
+  color: #aebbc0;
+}
+
+.app-theme-dark .user-count b {
+  color: #edf1f2;
+}
+
+.app-theme-dark .user-directory-head {
+  border-color: #3b464d;
+  background: #20262b;
+  color: #e9edef;
+}
+
+.app-theme-dark .user-directory-head p {
+  color: #aab5ba;
+}
+
+.app-theme-dark .user-row {
+  border-color: #3b464d;
+  background: #242a30;
+}
+
+.app-theme-dark .user-avatar {
+  background: #294238;
+  color: #9bd4be;
+}
+
+.app-theme-dark .role-state.super_admin,
+.app-theme-dark .locked-role-control {
+  border-color: #574a69;
+  background: #352f40;
+  color: #c9b3e4;
+}
+
+.app-theme-dark .role-state.admin {
+  border-color: #3f5865;
+  background: #293943;
+  color: #9fc9dc;
+}
+
+.app-theme-dark .role-state.standard,
+.app-theme-dark .access-state.active {
+  border-color: #3f6656;
+  background: #293e35;
+  color: #9bd4be;
+}
+
+.app-theme-dark .access-state.disabled {
+  border-color: #5b484a;
+  background: #3b2e31;
+  color: #dca5a1;
+}
+
+.app-theme-dark .user-row em {
+  background: #293b45;
+  color: #9fc7dc;
+}
+
+.app-theme-dark .viewer-admin-icon.production {
+  background: #29443a;
+  color: #9bd5be;
+}
+
+.app-theme-dark .viewer-admin-icon:not(.production) {
+  background: #403823;
+  color: #e9c47f;
+}
+
+.app-theme-dark .viewer-local-warning.secure {
+  border-color: #3f6254;
+  background: #263a33;
+  color: #b9d9cc;
+}
+
+.app-theme-dark .viewer-local-warning:not(.secure) {
+  border-color: #655735;
+  background: #3a3422;
+  color: #e3cd9d;
+}
+
+.app-theme-dark .viewer-local-warning b {
+  color: inherit;
+}
+
+.app-theme-dark .editor-delete-button {
+  border-color: #6d4648;
+  background: #3a292c;
+  color: #e89a95;
+}
+
+.app-theme-dark .time-mode-options button.active {
+  border-color: #4d8973;
+  background: #294238;
+  color: #9dd7c0;
+}
+
+.app-theme-dark .status-code {
+  border-color: #465159;
+  background: #252c31;
+  color: #b7c2c6;
+}
+
+.app-theme-dark .status-code > span {
+  color: #9da9ae;
+}
+
+.app-theme-dark .data-maintenance p,
+.app-theme-dark .data-maintenance-actions > span {
+  color: #aeb9bd;
+}
+
+/* The on-screen label stays paper-white because it previews the physical
+   printout. Its barcode placeholder must stay light as well to avoid a mixed
+   dark/light card. */
+.app-theme-dark .label-preview .paper-label {
+  border-color: #66737a;
+  box-shadow: 0 10px 26px rgba(0,0,0,.26);
+}
+
+.app-theme-dark .paper-label .barcode-placeholder {
+  border-color: #c9d2ce;
+  background: #f3f6f4;
+  color: #6d7b75;
+}
+
+/* Dark table feedback: hovering a job should lift it slightly without turning
+   the entire row white. Deadline rows keep their warning meaning. */
+.app-theme-dark .reviewable-row:hover td,
+.app-theme-dark .job-part-row:hover td,
+.app-theme-dark .jobs-workspace:fullscreen .reviewable-row:hover td.actions-cell {
+  background: #2b3439;
+}
+
+.app-theme-dark tr.deadline-soon.reviewable-row:hover td,
+.app-theme-dark .jobs-workspace:fullscreen tr.deadline-soon.reviewable-row:hover td.actions-cell {
+  background: #463b22;
+}
+
+.app-theme-dark tr.deadline-overdue.reviewable-row:hover td,
+.app-theme-dark .jobs-workspace:fullscreen tr.deadline-overdue.reviewable-row:hover td.actions-cell {
+  background: #492d30;
+}
+
+/* Manual-review controls need their own connected dark treatment. */
+.app-theme-dark .time-input b {
+  border-color: #4a565e;
+  background: #30383e;
+  color: #cbd5d9;
+}
+
+.app-theme-dark .editor-head > button,
+.app-theme-dark .reprint-head > button,
+.app-theme-dark .portal-note-head > button,
+.app-theme-dark .admin-editor-message > button {
+  border: 1px solid #47535a;
+  background: #30383e;
+  color: #cbd5d9;
+}
+
+.app-theme-dark .editor-head > button:hover,
+.app-theme-dark .reprint-head > button:hover,
+.app-theme-dark .portal-note-head > button:hover,
+.app-theme-dark .admin-editor-message > button:hover {
+  border-color: #65727a;
+  background: #3a454c;
+  color: #fff;
+}
+
+.app-theme-dark .job-created-confirmation small,
+.app-theme-dark .job-created-confirmation p,
+.app-theme-dark .job-created-confirmation > button {
+  color: #a9c5ba;
+}
+
+.app-theme-dark .job-created-check {
+  background: #55a98a;
+}
+
+.app-theme-dark .active-job-delete-action {
+  border-color: #3a444b;
+  background: #242a30;
+}
+
+.app-theme-dark .active-job-delete-action > button,
+.app-theme-dark .danger-button,
+.app-theme-dark .remove-user,
+.app-theme-dark .billing-clear-button {
+  border-color: #70484a;
+  background: #3b292c;
+  color: #eb9994;
+}
+
+.app-theme-dark .jobs-workspace:fullscreen,
+.app-theme-dark .jobs-workspace:-webkit-full-screen {
+  background: #171b20;
+}
+
+@media (max-width: 900px) {
+  .main-theme-toggle span { display: none; }
+  .main-theme-toggle button { width: 30px; justify-content: center; padding: 0; }
 }

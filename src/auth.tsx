@@ -153,10 +153,10 @@ function LoginScreen({ access, sessionError }: { access: "main" | "production"; 
       <img src={worthHigginsLogo} alt="Worth Higgins & Associates"/>
       <p className="eyebrow">{access === "production" ? "PRODUCTION FLOOR ACCESS" : "SECURE ADMINISTRATIVE ACCESS"}</p>
       <h1>{access === "production" ? "Open the Production Floor Portal" : "Sign in to PlantFlow"}</h1>
-      <p className="auth-intro">{access === "production" ? "Production employees enter their assigned name and passcode. Administrators can enter their admin email and PlantFlow password." : "Administrator accounts provide access to the full PlantFlow production workspace."}</p>
+      <p className="auth-intro">{access === "production" ? "Production employees use their assigned name and passcode. Admins and Super Admins use the same email and password they use for the main PlantFlow panel." : "Administrator accounts provide access to the full PlantFlow production workspace."}</p>
       <form onSubmit={submit}>
-        <label><span>{access === "production" ? "Employee name or admin email" : "Email address"}</span><input autoComplete="username" type={access === "production" ? "text" : "email"} required value={identifier} onChange={event => setIdentifier(event.target.value)} placeholder={access === "production" ? "Employee name or admin email" : "name@worthhiggins.com"}/></label>
-        <label><span>{access === "production" ? "Passcode" : "Password"}</span><input autoComplete="current-password" type="password" required value={password} onChange={event => setPassword(event.target.value)} placeholder={access === "production" ? "Enter your passcode" : "Enter your password"}/></label>
+        <label><span>{access === "production" ? "Employee name or administrator email" : "Email address"}</span><input autoComplete="username" type={access === "production" ? "text" : "email"} required value={identifier} onChange={event => setIdentifier(event.target.value)} placeholder={access === "production" ? "Employee name or administrator email" : "name@worthhiggins.com"}/></label>
+        <label><span>{access === "production" ? "Passcode or PlantFlow password" : "Password"}</span><input autoComplete="current-password" type="password" required value={password} onChange={event => setPassword(event.target.value)} placeholder={access === "production" ? "Enter passcode or PlantFlow password" : "Enter your password"}/></label>
         {error && <div className="auth-error" role="alert">{error}</div>}
         <button className="primary" disabled={submitting}>{submitting ? "Signing in…" : access === "production" ? "Open production portal" : "Sign in"}</button>
       </form>
