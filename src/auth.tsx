@@ -4,7 +4,7 @@ import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import worthHigginsLogo from "./assets/WHALogo_Horizontal.png";
 
-export type UserRole = "super_admin" | "admin" | "standard" | "manager" | "viewer";
+export type UserRole = "super_admin" | "admin" | "standard" | "job_creator" | "manager" | "viewer";
 export type UserProfile = {
   uid: string;
   email: string;
@@ -37,7 +37,7 @@ export function usePlantFlowAuth() {
   return value;
 }
 
-function friendlyAuthError(error: unknown, access: "main" | "production") {
+function friendlyAuthError(error: unknown, access: "main" | "production" | "intake") {
   const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
   if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return access === "production" ? "That employee name, administrator email, or passcode was not recognized." : "That email or password was not recognized.";
   if (code.includes("too-many-requests")) return "Too many attempts. Wait a few minutes and try again.";
@@ -46,7 +46,7 @@ function friendlyAuthError(error: unknown, access: "main" | "production") {
   return "PlantFlow could not sign you in. Please try again.";
 }
 
-export function AuthGate({ children, access = "main" }: { children: ReactNode; access?: "main" | "production" }) {
+export function AuthGate({ children, access = "main" }: { children: ReactNode; access?: "main" | "production" | "intake" }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,10 +66,11 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
       if (!snapshot.exists()) throw new Error("No PlantFlow access profile exists for this account.");
       const data = snapshot.data() as Omit<UserProfile, "uid">;
       if (!data.enabled) throw new Error("This PlantFlow account has been disabled.");
-      if (!["super_admin", "admin", "standard", "manager", "viewer"].includes(data.role)) throw new Error("This account does not have a valid PlantFlow role.");
+      if (!["super_admin", "admin", "standard", "job_creator", "manager", "viewer"].includes(data.role)) throw new Error("This account does not have a valid PlantFlow role.");
       const effectiveRole = nextUser.uid === "TOXwE0xXDlgoL4YqBbrTOGjxCyk1" ? "super_admin" : data.role;
       if (access === "main" && !["super_admin", "admin"].includes(effectiveRole)) throw new Error("This account is limited to the Production Floor Portal.");
       if (access === "production" && !["super_admin", "admin", "standard"].includes(effectiveRole)) throw new Error("This account does not have Production Floor Portal access.");
+      if (access === "intake" && !["super_admin", "admin", "job_creator"].includes(effectiveRole)) throw new Error("This account does not have Job Creation Portal access.");
       if (access === "production" && effectiveRole === "standard") {
         const lastActive = Number(window.localStorage.getItem(productionSessionKey) || 0);
         if (lastActive && Date.now() - lastActive > productionSessionWindow) {
@@ -125,7 +126,7 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
   return <AuthContext.Provider value={{ user, profile, logout: async () => { if (profile.role === "standard") window.localStorage.removeItem(productionSessionKey); await signOut(auth); } }}>{children}</AuthContext.Provider>;
 }
 
-function LoginScreen({ access, sessionError }: { access: "main" | "production"; sessionError: string }) {
+function LoginScreen({ access, sessionError }: { access: "main" | "production" | "intake"; sessionError: string }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(sessionError);
@@ -151,16 +152,16 @@ function LoginScreen({ access, sessionError }: { access: "main" | "production"; 
   return <div className="auth-screen">
     <main className="auth-card">
       <img src={worthHigginsLogo} alt="Worth Higgins & Associates"/>
-      <p className="eyebrow">{access === "production" ? "PRODUCTION FLOOR ACCESS" : "SECURE ADMINISTRATIVE ACCESS"}</p>
-      <h1>{access === "production" ? "Open the Production Floor Portal" : "Sign in to PlantFlow"}</h1>
-      <p className="auth-intro">{access === "production" ? "Production employees use their assigned name and passcode. Admins and Super Admins use the same email and password they use for the main PlantFlow panel." : "Administrator accounts provide access to the full PlantFlow production workspace."}</p>
+      <p className="eyebrow">{access === "production" ? "PRODUCTION FLOOR ACCESS" : access === "intake" ? "SECURE JOB INTAKE" : "SECURE ADMINISTRATIVE ACCESS"}</p>
+      <h1>{access === "production" ? "Open the Production Floor Portal" : access === "intake" ? "Open the Job Creation Portal" : "Sign in to PlantFlow"}</h1>
+      <p className="auth-intro">{access === "production" ? "Production employees use their assigned name and passcode. Admins and Super Admins use the same email and password they use for the main PlantFlow panel." : access === "intake" ? "Authorized CSRs and project managers can create production jobs without opening the main PlantFlow workspace." : "Administrator accounts provide access to the full PlantFlow production workspace."}</p>
       <form onSubmit={submit}>
         <label><span>{access === "production" ? "Employee name or administrator email" : "Email address"}</span><input autoComplete="username" type={access === "production" ? "text" : "email"} required value={identifier} onChange={event => setIdentifier(event.target.value)} placeholder={access === "production" ? "Employee name or administrator email" : "name@worthhiggins.com"}/></label>
         <label><span>{access === "production" ? "Passcode or PlantFlow password" : "Password"}</span><input autoComplete="current-password" type="password" required value={password} onChange={event => setPassword(event.target.value)} placeholder={access === "production" ? "Enter passcode or PlantFlow password" : "Enter your password"}/></label>
         {error && <div className="auth-error" role="alert">{error}</div>}
-        <button className="primary" disabled={submitting}>{submitting ? "Signing in…" : access === "production" ? "Open production portal" : "Sign in"}</button>
+        <button className="primary" disabled={submitting}>{submitting ? "Signing in…" : access === "production" ? "Open production portal" : access === "intake" ? "Open job creation portal" : "Sign in"}</button>
       </form>
-      <small className="auth-help">{access === "production" ? "Production employee sessions expire after 12 hours without activity. Administrator access uses the administrator’s existing PlantFlow credentials." : "Accounts are managed by a PlantFlow Super Admin."}</small>
+      <small className="auth-help">{access === "production" ? "Production employee sessions expire after 12 hours without activity. Administrator access uses the administrator’s existing PlantFlow credentials." : access === "intake" ? "Job Creator accounts are managed by a PlantFlow Super Admin. Admins can use their normal PlantFlow credentials." : "Accounts are managed by a PlantFlow Super Admin."}</small>
     </main>
   </div>;
 }

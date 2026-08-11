@@ -80,6 +80,43 @@ function isClosed(job: Job, state: AppState) {
 }
 
 export const cloudDataService = {
+  subscribeJobIntake(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {
+    let configuration: Configuration | null = null;
+    let jobs: Job[] = [];
+    let configurationLoaded = false;
+    let jobsLoaded = false;
+    const emit = () => {
+      if (!configurationLoaded || !jobsLoaded) return;
+      onState(configuration ? {
+        ...seedState,
+        ...configuration,
+        settings: { ...seedState.settings, ...configuration.settings },
+        jobs,
+        scans: [],
+      } : null);
+    };
+    const unsubscribers = [
+      onSnapshot(configurationDocument, snapshot => {
+        configurationLoaded = true;
+        configuration = snapshot.exists() ? snapshot.data() as Configuration : null;
+        emit();
+      }, onError),
+      onSnapshot(jobsCollection, snapshot => {
+        jobsLoaded = true;
+        jobs = snapshot.docs.map(item => item.data() as Job);
+        emit();
+      }, onError),
+    ];
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+  },
+
+  async createJobFromIntake(job: Job) {
+    const batch = writeBatch(db);
+    batch.set(doc(jobsCollection, job.id), firestoreDocument(job));
+    batch.set(doc(publicJobsCollection, job.id), publicJob(job));
+    await batch.commit();
+  },
+
   async deleteJobPermanently(job: Job) {
     const identifiers = [job.jobNumber, ...(job.parts || []).map(part => part.code)];
     const scanSnapshot = await getDocs(query(scansCollection, where("jobNumber", "in", identifiers)));
