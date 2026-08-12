@@ -26,10 +26,6 @@
 .signout-button:hover{border-color:#9db6ab;color:#174d3c}
 .live-dot.offline{background:#e2a235;box-shadow:0 0 0 4px rgba(226,162,53,.14)}
 .cloud-warning{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:-7px 0 18px;padding:11px 14px;border:1px solid #ead49f;border-radius:9px;background:#fff8e9;color:#6f521d;font-size:11px}.cloud-warning small{grid-column:2;color:#8a713d}
-.migration-overlay{position:fixed;z-index:3000;inset:0;display:grid;place-items:center;padding:24px;background:rgba(12,33,26,.7);backdrop-filter:blur(5px)}
-.migration-card{width:min(600px,100%);padding:30px;border-radius:16px;background:#fff;box-shadow:0 28px 90px rgba(0,0,0,.28)}
-.migration-card h2{margin:8px 0;font-size:24px}.migration-card>p:not(.eyebrow){color:var(--muted);font-size:12px;line-height:1.5}.migration-card>small{display:block;margin-top:15px;color:#6d7c76;font-size:10px}
-.migration-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}.migration-options button{min-height:116px;padding:17px;text-align:left}.migration-options button b,.migration-options button span{display:block}.migration-options button b{font-size:13px}.migration-options button span{margin-top:7px;font-size:10px;font-weight:500;line-height:1.45;opacity:.84}
 .viewer-signout{padding:7px 10px;border:1px solid var(--viewer-border,#cbdad3);border-radius:7px;background:var(--viewer-panel,#fff);color:var(--viewer-accent,#315d4d);box-shadow:none;font-size:9px;font-weight:800}
 .public-viewer-message{width:min(470px,100%);padding:30px;border:1px solid #d7e2dd;border-radius:14px;background:#fff;box-shadow:0 18px 55px rgba(17,42,34,.1);text-align:center}.public-viewer-message b{font-size:19px}.public-viewer-message p{margin:9px 0 18px;color:var(--muted);font-size:12px;line-height:1.5}
 .metric.blue strong{color:#2f6c86}
@@ -37,4 +33,4 @@
 .metric.red strong{color:#b54a45}
 .metric.green strong{color:#28795d}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
-@media(max-width:760px){.auth-card{padding:28px 24px}.migration-options{grid-template-columns:1fr}.user-chip{display:none}.header-actions{gap:6px}.signout-button{padding:0 7px}}
+@media(max-width:760px){.auth-card{padding:28px 24px}.user-chip{display:none}.header-actions{gap:6px}.signout-button{padding:0 7px}}

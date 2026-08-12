@@ -18,6 +18,13 @@ type SafariFullscreenDocument = Document & { webkitFullscreenElement?: Element |
 type SafariFullscreenElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
 type DepartmentSelection = string[] | null;
 
+function emptyProductionState() {
+  const state = structuredClone(seedState);
+  state.jobs = [];
+  state.scans = [];
+  return state;
+}
+
 const nav: { id: Page; label: string; icon: string }[] = [
   { id: "dashboard", label: "Live Dashboard", icon: "⌂" },
   { id: "create", label: "Create Job", icon: "+" },
@@ -425,13 +432,13 @@ export default function Home() {
   const [productionFloorPortal] = useState(() => new URLSearchParams(window.location.search).get("view") === "production");
   const [cloudStatus, setCloudStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [cloudError, setCloudError] = useState("");
-  const [migrationRequired, setMigrationRequired] = useState(false);
   const scanBuffer = useRef("");
   const lastKeyAt = useRef(0);
   const titleBeforePrint = useRef("");
   const activeJobsRef = useRef<HTMLElement>(null);
   const previousPageRef = useRef<Page>(page);
   const cloudReady = useRef(false);
+  const cloudInitializationStarted = useRef(false);
   const pendingCloudState = useRef<typeof state | null>(null);
 
   useEffect(() => {
@@ -461,8 +468,18 @@ export default function Home() {
     const unsubscribe = cloudDataService.subscribe(remoteState => {
       if (!remoteState) {
         cloudReady.current = false;
-        setMigrationRequired(canEdit);
-        setCloudStatus("ready");
+        if (canEdit && !cloudInitializationStarted.current) {
+          cloudInitializationStarted.current = true;
+          const cleanState = emptyProductionState();
+          setState(cleanState);
+          dataService.save(cleanState);
+          setCloudStatus("loading");
+          void cloudDataService.saveInitial(cleanState, user.uid).catch(error => {
+            cloudInitializationStarted.current = false;
+            setCloudStatus("offline");
+            setCloudError(error instanceof Error ? error.message : "PlantFlow could not initialize the shared workspace.");
+          });
+        }
         return;
       }
       if (pendingCloudState.current && canEdit) {
@@ -480,7 +497,7 @@ export default function Home() {
         return;
       }
       cloudReady.current = true;
-      setMigrationRequired(false);
+      cloudInitializationStarted.current = false;
       setCloudStatus("ready");
       setCloudError("");
       setState(remoteState);
@@ -558,22 +575,6 @@ export default function Home() {
       setNotice({ kind: "error", title: "Older history could not be loaded", detail: error instanceof Error ? error.message : "Try again when the cloud connection is available." });
     } finally {
       setHistoryLoading(false);
-    }
-  };
-
-  const initializeSharedData = async (source: "local" | "sample") => {
-    const next = source === "local" ? dataService.load() : structuredClone(seedState);
-    try {
-      await cloudDataService.saveInitial(next, user.uid);
-      dataService.save(next);
-      setState(next);
-      cloudReady.current = true;
-      setMigrationRequired(false);
-      setCloudStatus("ready");
-      setNotice({kind:"success",title:"Shared PlantFlow data created",detail:source === "local" ? "This device’s jobs are now the shared starting point." : "A fresh shared sample workspace is ready."});
-    } catch (error) {
-      setCloudStatus("offline");
-      setCloudError(error instanceof Error ? error.message : "PlantFlow could not create the shared workspace.");
     }
   };
 
@@ -1043,7 +1044,6 @@ export default function Home() {
     {splitJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/></OverlayPortal>}
     {statusPrint && <StatusPrintSheet statuses={statusPrint} onClose={()=>setStatusPrint(null)} onPrint={printStatusBarcodes}/>} 
     {managementReport && <ManagementReport type={managementReport} state={state} onClose={()=>setManagementReport(null)} onPrint={printManagementReport}/>} 
-    {migrationRequired && <div className="migration-overlay" role="dialog" aria-modal="true" aria-label="Initialize shared PlantFlow data"><div className="migration-card"><p className="eyebrow">ONE-TIME CLOUD SETUP</p><h2>Choose the shared starting data</h2><p>No shared PlantFlow records exist yet. Nothing will be uploaded until you choose an option.</p><div className="migration-options"><button className="primary" onClick={()=>void initializeSharedData("local")}><b>Use this device’s PlantFlow data</b><span>Uploads the jobs, history, departments, and statuses currently shown here.</span></button><button className="secondary" onClick={()=>void initializeSharedData("sample")}><b>Start with fresh sample data</b><span>Creates a clean shared pilot using the placeholder jobs and departments.</span></button></div><small>Recommended: use this device’s data if it contains the PlantFlow records you want to keep.</small></div></div>}
   </div>;
 }
 

@@ -4343,8 +4343,7 @@ tr.deadline-overdue .status-pill.green {
 .app-theme-dark .reprint-modal,
 .app-theme-dark .report-modal,
 .app-theme-dark .status-sheet-modal,
-.app-theme-dark .data-delete-confirmation > div,
-.app-theme-dark .migration-card {
+.app-theme-dark .data-delete-confirmation > div {
   border-color: #39434b;
   background: #242a30;
   color: #eef2f3;
