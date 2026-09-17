@@ -1038,7 +1038,7 @@ export default function Home() {
           <Metric label="Completed today" value={state.jobs.filter(j=>j.status==="Complete"&&j.updatedAt.slice(0,10)===today).length} sub="Production output" tone="green" />
         </div>
         <div className="dashboard-grid">
-          <div className="panel span-2"><div className="panel-head"><div><h2>Active production</h2><p>Live location and timing for every open job</p></div><button className="text-button" onClick={()=>setPage("jobs")}>View all →</button></div><JobTable jobs={activeJobs.slice(0,6)} deptName={deptName} settings={state.settings} highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onDeletePart={hasAdministrationAccess?(job,part)=>setPartToDelete({job,part}):undefined} onOpen={setSelectedJob}/></div>
+          <div className="panel span-2"><div className="panel-head"><div><h2>Active production</h2><p>Live location and timing for every open job</p></div><button className="text-button" onClick={()=>setPage("jobs")}>View all →</button></div><JobTable jobs={activeJobs.slice(0,6)} deptName={deptName} settings={state.settings} highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onDeletePart={hasAdministrationAccess?(job,part)=>setPartToDelete({job,part}):undefined} onOpen={setSelectedJob} departments={departments} statuses={statuses} allowDateEditing={false} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/></div>
           <div className="panel"><div className="panel-head"><div><h2>Recent scans</h2><p>Latest shop-floor movements</p></div><span className="live-pill"><i/>LIVE</span></div><ScanList scans={state.scans.slice(0,5)} /></div>
         </div>
       </section>}
