@@ -701,6 +701,114 @@ td small,
   font-size: 12px;
 }
 
+.review-parts {
+  margin: 0 0 20px;
+  border: 1px solid #d8e3de;
+  border-radius: 11px;
+  padding: 14px;
+  background: #f8fbf9;
+}
+
+.review-parts-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.review-parts-heading h3 {
+  font-size: 15px;
+}
+
+.review-parts-heading > span {
+  color: #718079;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.review-parts-list {
+  display: grid;
+  gap: 8px;
+}
+
+.review-part-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border: 1px solid #dde7e2;
+  border-radius: 9px;
+  padding: 11px 12px;
+  background: #fff;
+}
+
+.review-part-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-part-identity > b {
+  color: #17684f;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.review-part-identity > strong {
+  font-size: 13px;
+}
+
+.review-part-identity > small {
+  overflow: hidden;
+  color: #718079;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-part-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 14px;
+  margin: 0;
+}
+
+.review-part-card dl > div {
+  display: grid;
+  gap: 4px;
+}
+
+.review-part-card dt {
+  color: #7a8882;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.review-part-card dd {
+  margin: 0;
+  color: #243c34;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+@media (max-width: 700px) {
+  .review-part-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .review-part-card dl {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .review-part-card dd {
+    overflow-wrap: anywhere;
+  }
+}
+
 .split-parts {
   display: grid;
   gap: 10px;
@@ -4670,12 +4778,28 @@ tr.deadline-overdue .status-pill.green {
 .app-theme-dark .create-part-row,
 .app-theme-dark .split-part-card,
 .app-theme-dark .split-guidance,
+.app-theme-dark .review-parts,
+.app-theme-dark .review-part-card,
 .app-theme-dark .billing-note-editor,
 .app-theme-dark .ready-billing-empty,
 .app-theme-dark .ready-billing-filter-empty {
   border-color: #3d484f;
   background: #20262b;
   color: #dce3e5;
+}
+
+.app-theme-dark .review-parts-heading > span,
+.app-theme-dark .review-part-identity > small,
+.app-theme-dark .review-part-card dt {
+  color: #9da9ae;
+}
+
+.app-theme-dark .review-part-identity > b {
+  color: #79c2a7;
+}
+
+.app-theme-dark .review-part-card dd {
+  color: #e5eaec;
 }
 
 .app-theme-dark .route-options > label:hover,
