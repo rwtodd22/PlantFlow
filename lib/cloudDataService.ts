@@ -127,6 +127,11 @@ export const cloudDataService = {
     ]);
   },
 
+  async deletePartHistory(partCode: string) {
+    const scanSnapshot = await getDocs(query(scansCollection, where("jobNumber", "==", partCode)));
+    await deleteDocumentsInBatches(scanSnapshot.docs);
+  },
+
   async clearAllJobData() {
     await clearCollection(scansCollection);
     await clearCollection(publicJobsCollection);

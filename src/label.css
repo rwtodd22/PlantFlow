@@ -633,6 +633,21 @@ td small,
   font-weight: 800;
 }
 
+.part-delete-action {
+  border: 1px solid #e0c6c2;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff8f7;
+  color: #9f3733;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.part-delete-action:hover {
+  border-color: #bd625d;
+  background: #fff0ee;
+}
+
 .job-part-row td {
   background: #f8fbf9;
   border-bottom-color: #e1ebe6;
@@ -1041,6 +1056,36 @@ tr.deadline-overdue .status-pill.green {
   padding: 25px;
   background: #fff;
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.34);
+}
+
+.delete-part-dialog {
+  width: min(520px, 100%);
+}
+
+.delete-part-warning {
+  display: grid;
+  gap: 7px;
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #ead0cc;
+  border-radius: 10px;
+  background: #fff7f5;
+  color: #6f312e;
+}
+
+.delete-part-warning span {
+  color: #745d59;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.part-delete-confirm {
+  border: 1px solid #a83d38;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #a83d38;
+  color: #fff;
+  font-weight: 800;
 }
 
 .editor-head {
@@ -4350,6 +4395,27 @@ tr.deadline-overdue .status-pill.green {
   box-shadow: 0 5px 22px rgba(0,0,0,.2);
 }
 
+.app-theme-dark .delete-part-warning {
+  border-color: #693f3d;
+  background: #352728;
+  color: #f3c4c0;
+}
+
+.app-theme-dark .delete-part-warning span {
+  color: #cdb5b2;
+}
+
+.app-theme-dark .part-delete-action {
+  border-color: #70413f;
+  background: #342829;
+  color: #efaaa5;
+}
+
+.app-theme-dark .part-delete-action:hover {
+  border-color: #a75c57;
+  background: #422c2d;
+}
+
 .app-theme-dark .panel-head p,
 .app-theme-dark .group-heading p,
 .app-theme-dark .scanner-hero > p,
@@ -5270,6 +5336,31 @@ tr.deadline-overdue .status-pill.green {
 .app-theme-dark .jobs-workspace:fullscreen,
 .app-theme-dark .jobs-workspace:-webkit-full-screen {
   background: #171b20;
+}
+
+.app-theme-dark .jobs-workspace:fullscreen th.actions-heading,
+.app-theme-dark .jobs-workspace:fullscreen th.actions-drawer-heading,
+.app-theme-dark .jobs-workspace:fullscreen td.actions-cell,
+.app-theme-dark .jobs-workspace:fullscreen td.actions-closed-cell,
+.app-theme-dark .jobs-workspace:-webkit-full-screen th.actions-heading,
+.app-theme-dark .jobs-workspace:-webkit-full-screen th.actions-drawer-heading,
+.app-theme-dark .jobs-workspace:-webkit-full-screen td.actions-cell,
+.app-theme-dark .jobs-workspace:-webkit-full-screen td.actions-closed-cell {
+  border-color: #353f46;
+  background: #242a30;
+  box-shadow: -8px 0 12px rgba(0,0,0,.16);
+}
+
+.app-theme-dark .jobs-workspace:fullscreen tr.deadline-soon td.actions-cell,
+.app-theme-dark .jobs-workspace:-webkit-full-screen tr.deadline-soon td.actions-cell {
+  border-color: #665b35;
+  background: #3b361f;
+}
+
+.app-theme-dark .jobs-workspace:fullscreen tr.deadline-overdue td.actions-cell,
+.app-theme-dark .jobs-workspace:-webkit-full-screen tr.deadline-overdue td.actions-cell {
+  border-color: #6d4245;
+  background: #42292c;
 }
 
 @media (max-width: 900px) {
