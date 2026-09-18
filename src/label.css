@@ -4228,6 +4228,33 @@ tr.deadline-overdue .status-pill.green {
 .production-priority-select { width: auto; padding: 4px 22px 4px 2px; background-color: transparent; }
 .production-date-select { width: 118px; padding: 4px 2px; background: transparent; color: var(--viewer-text); font-size: 10px; font-weight: 750; }
 .production-pill-select:focus,.production-priority-select:focus,.production-date-select:focus { outline: 2px solid var(--viewer-accent); outline-offset: 2px; }
+.production-floor-portal .department-pill {
+  border: 1px solid color-mix(in srgb, var(--viewer-accent) 35%, var(--viewer-border));
+  background: var(--viewer-accent-soft);
+  color: var(--viewer-accent);
+}
+.production-floor-portal .status-pill {
+  border: 1px solid #d3dfda;
+  background: #f4f7f5;
+  color: #43534d;
+}
+.production-floor-portal .status-pill.blue { border-color: #bfd7e2; background: #e5f1f6; color: #275d75; }
+.production-floor-portal .status-pill.amber { border-color: #ead2aa; background: #fff1d8; color: #9d6119; }
+.production-floor-portal .status-pill.orange { border-color: #ebc9a6; background: #fff0df; color: #a85c19; }
+.production-floor-portal .status-pill.red { border-color: #e9c1be; background: #fde8e7; color: #a92d29; }
+.production-floor-portal .status-pill.green { border-color: #bfddcc; background: #e3f3ea; color: #17704e; }
+.production-floor-portal.viewer-theme-midnight .status-pill,
+.production-floor-portal.viewer-theme-graphite .status-pill { border-color: #48545a; background: #30383e; color: #c9d2d6; }
+.production-floor-portal.viewer-theme-midnight .status-pill.blue,
+.production-floor-portal.viewer-theme-graphite .status-pill.blue { border-color: #385d6d; background: #273e4a; color: #91c5d9; }
+.production-floor-portal.viewer-theme-midnight .status-pill.amber,
+.production-floor-portal.viewer-theme-graphite .status-pill.amber { border-color: #705632; background: #44351f; color: #edbc75; }
+.production-floor-portal.viewer-theme-midnight .status-pill.orange,
+.production-floor-portal.viewer-theme-graphite .status-pill.orange { border-color: #784d2d; background: #4b321f; color: #f0b377; }
+.production-floor-portal.viewer-theme-midnight .status-pill.red,
+.production-floor-portal.viewer-theme-graphite .status-pill.red { border-color: #794448; background: #482a2d; color: #ee9690; }
+.production-floor-portal.viewer-theme-midnight .status-pill.green,
+.production-floor-portal.viewer-theme-graphite .status-pill.green { border-color: #3f6758; background: #263e35; color: #88ceb3; }
 .production-expand-button { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--viewer-border); border-radius: 6px; background: var(--viewer-soft); color: var(--viewer-accent); font-size: 12px; font-weight: 900; }
 .production-expanded-row > td { padding: 0 !important; background: var(--viewer-soft) !important; }
 .production-expanded-content { display: grid; gap: 13px; padding: 14px; border-bottom: 1px solid var(--viewer-border); }
