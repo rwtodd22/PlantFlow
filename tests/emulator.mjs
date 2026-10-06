@@ -64,4 +64,20 @@ const roster=(await getDoc(doc(admin,'configuration','jobPeople'))).data();asser
 await service.saveChanges({...seedState,jobs:[persisted],scans:[]},{...seedState,jobs:[{...persisted,projectManager:'Manager Delta'}],scans:[]},'admin',false);
 assert.deepEqual((await getDoc(doc(admin,'jobs',named.id))).data().savedProjectManagers,['Manager Beta','Manager Delta']);
 console.log('PASS: service create/edit persistence, independent names, prior-name reuse, and no-config-write path.');
+// Old Clear / 90-day cleanup batches are denied atomically, even if queued earlier.
+const expired={...job,id:'old-expired',jobNumber:'OLD-EXPIRED',parts:[],billingApprovedAt:'2025-01-01T00:00:00Z'};
+const untouched={...seedState.jobs[0],id:'unrelated',jobNumber:'UNRELATED'};
+await env.withSecurityRulesDisabled(async ctx=>{for(const collectionName of ['jobs','publicJobs']){await setDoc(doc(ctx.firestore(),collectionName,expired.id),expired);await setDoc(doc(ctx.firestore(),collectionName,untouched.id),untouched);}});
+for(const label of ['manual-clear','queued-90-day']){const oldBatch=writeBatch(admin);oldBatch.delete(doc(admin,'jobs',expired.id));oldBatch.delete(doc(admin,'publicJobs',expired.id));oldBatch.set(doc(admin,'jobs',untouched.id),{...untouched,notes:label});await assertFails(oldBatch.commit());assert.deepEqual((await getDoc(doc(admin,'jobs',expired.id))).data(),expired);assert.deepEqual((await getDoc(doc(admin,'publicJobs',expired.id))).data(),expired);assert.deepEqual((await getDoc(doc(admin,'jobs',untouched.id))).data(),untouched);}
+// Normal scan writes and public cleanup still work; direct reset deletion does not.
+await assertSucceeds(setDoc(doc(worker,'scanEvents','normal-scan'),{jobNumber:'UNRELATED',jobId:'unrelated',timestamp:'2026-10-06T00:00:00Z',type:'Normal'}));
+await assertSucceeds(setDoc(doc(worker,'jobs','unrelated'),{...untouched,currentDepartmentId:'print'}));await assertSucceeds(deleteDoc(doc(worker,'publicJobs','unrelated')));
+const resetBatch=writeBatch(admin);resetBatch.delete(doc(admin,'jobs',expired.id));resetBatch.delete(doc(admin,'jobs','unrelated'));await assertFails(resetBatch.commit());assert.equal((await getDoc(doc(admin,'jobs','unrelated'))).exists(),true);
+// Existing old Reset clears collections sequentially: source scan deletion is still allowed.
+// This deliberately verifies the limit of a jobs-only safeguard, not a whole-reset guarantee.
+await assertSucceeds(deleteDoc(doc(admin,'scanEvents','normal-scan')));
+assert.equal((await getDoc(doc(admin,'scanEvents','normal-scan'))).exists(),false);
+assert.equal((await getDoc(doc(admin,'jobs','unrelated'))).exists(),true);
+await service.archiveJob(expired.id,'admin');assert.deepEqual((await getDoc(doc(admin,'archivedJobs',expired.id))).data().job,expired);assert.equal((await getDoc(doc(admin,'jobs',expired.id))).exists(),false);
+console.log('PASS: old Clear/queued-cleanup batches denied atomically; current job and public copy retained; unrelated batch writes rolled back; normal scanning/editing/public cleanup allowed; exact-copy archive succeeds; reset job deletion denied. LIMIT: separate legacy reset scan deletion still allowed.');
 await env.cleanup();

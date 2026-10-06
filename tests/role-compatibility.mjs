@@ -20,6 +20,8 @@ for(const rules of ['tests/published-baseline.rules','firestore.rules']){
  }
  results.push(observed);await env.cleanup();
 }
-assert.deepEqual(results[1],results[0]);
-assert.equal(results[1]['standard:jobs:create'],true);assert.equal(results[1]['standard:jobs:delete'],true);assert.equal(results[1]['standard:jobs:priority'],true);assert.equal(results[1]['standard:jobs:due'],false);assert.equal(results[1]['standard:publicJobs:due'],true);assert.equal(results[1]['job_creator:jobs:create'],false);assert.equal(results[1]['job_creator:config:read'],false);
-console.log(`PASS: ${Object.keys(results[0]).length} ordinary-access outcomes match the verified published baseline across eight roles; independent people fields require no expanded permissions.`);
+const expected={...results[0]};
+for(const role of ['super_admin','admin','manager','standard'])expected[`${role}:jobs:delete`]=false;
+assert.deepEqual(results[1],expected);
+assert.equal(results[1]['standard:jobs:create'],true);assert.equal(results[1]['standard:jobs:delete'],false);assert.equal(results[1]['standard:jobs:priority'],true);assert.equal(results[1]['standard:jobs:due'],false);assert.equal(results[1]['standard:publicJobs:due'],true);assert.equal(results[1]['job_creator:jobs:create'],false);assert.equal(results[1]['job_creator:config:read'],false);
+console.log(`PASS: ${Object.keys(results[0]).length} access outcomes match the verified published baseline except the four intentional unarchived-job deletion denials across eight roles; independent people fields require no expanded permissions.`);

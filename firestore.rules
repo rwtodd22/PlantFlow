@@ -50,7 +50,13 @@ service cloud.firestore {
       allow create: if !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
         && !exists(/databases/$(database)/documents/archiveHistoryLocks/$(request.resource.data.jobNumber))
         && canManageProduction();
-      allow delete: if canManageProduction();
+      // Only remove the active record when this commit preserves its exact snapshot.
+      allow delete: if canManageAdministration()
+        && !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.job == resource.data
+        && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.historyStatus == 'capturing'
+        && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.archivedBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.archivedAt == request.time;
       allow update: if canManageProduction()
         && (!hasRole(['standard']) || request.resource.data.dueDate == resource.data.dueDate);
     }
