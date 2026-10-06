@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasRole(roles) {
+      return signedIn()
+        && userProfile().data.enabled == true
+        && userProfile().data.role in roles;
+    }
+
+    function canView() {
+      return hasRole(['super_admin', 'admin', 'standard', 'manager', 'viewer']);
+    }
+
+    function canManageProduction() {
+      return hasRole(['super_admin', 'admin', 'standard', 'manager']);
+    }
+
+    function canManageAdministration() {
+      return hasRole(['super_admin', 'admin']);
+    }
+
+    function isSuperAdmin() {
+      return hasRole(['super_admin'])
+        || (signedIn()
+          && request.auth.uid == 'TOXwE0xXDlgoL4YqBbrTOGjxCyk1'
+          && userProfile().data.enabled == true);
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /configuration/{documentId} {
+      allow read: if canView();
+      allow write: if canManageAdministration();
+    }
+
+    match /jobs/{jobId} {
+      allow read: if canView();
+      allow create, delete: if canManageProduction();
+      allow update: if canManageProduction()
+        && (!hasRole(['standard']) || request.resource.data.dueDate == resource.data.dueDate);
+    }
+
+    match /scanEvents/{eventId} {
+      allow read: if canView();
+      allow create, update: if canManageProduction();
+      allow delete: if hasRole(['super_admin', 'admin']);
+    }
+
+    match /publicConfiguration/{documentId} {
+      allow read: if true;
+      allow write: if canManageAdministration();
+    }
+
+    match /publicJobs/{jobId} {
+      allow read: if true;
+      allow write: if canManageProduction();
+    }
+  }
+}
