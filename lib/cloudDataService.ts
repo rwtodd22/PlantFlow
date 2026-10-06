@@ -1,8 +1,10 @@
-import { DocumentReference, Unsubscribe, collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, where, writeBatch } from "firebase/firestore";
+import { cleanPersonName, jobPeopleNames, rememberJobPeople, emptyPeopleNames, type PeopleNames } from "./jobPeople";
+import { DocumentReference, DocumentSnapshot, Unsubscribe, arrayUnion, runTransaction, collection, doc, getDoc, getDocs, getDocsFromServer, documentId, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, where, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
 
 const configurationDocument = doc(db, "configuration", "plantflow");
+const peopleDocument = doc(db, "configuration", "jobPeople");
 const jobsCollection = collection(db, "jobs");
 const scansCollection = collection(db, "scanEvents");
 const publicConfigurationDocument = doc(db, "publicConfiguration", "plantflow");
@@ -66,6 +68,8 @@ function publicJob(job: Job): Job {
   return firestoreDocument({
     ...job,
     notes: "",
+    savedCustomerRepresentatives: undefined,
+    savedProjectManagers: undefined,
     billingState: undefined,
     billingNote: undefined,
     billingApprovedAt: undefined,
@@ -79,7 +83,106 @@ function isClosed(job: Job, state: AppState) {
   return Boolean(state.statuses.find(status => status.name === job.status)?.closesJob);
 }
 
+async function readJobEventDocuments(job: Job) {
+  const codes = [...new Set([job.jobNumber, ...(job.parts || []).map(part => part.code)])];
+  const filters = [where("jobId", "==", job.id)];
+  for (let index = 0; index < codes.length; index += 30) filters.push(where("jobNumber", "in", codes.slice(index, index + 30)));
+  const found = new Map<string, import("firebase/firestore").QueryDocumentSnapshot>();
+  for (const filter of filters) {
+    let cursor: DocumentSnapshot | undefined;
+    while (true) {
+      const page = await getDocsFromServer(query(scansCollection, filter, orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(200)));
+      page.docs.forEach(event => { const data = event.data(); if (!data.jobId || data.jobId === job.id) found.set(event.id, event); });
+      if (page.size < 200) break;
+      cursor = page.docs.at(-1);
+    }
+  }
+  return [...found.values()];
+}
+
+function peopleUpdates(jobs: Job[]) {
+  const representatives = jobPeopleNames(jobs).customerRepresentatives;
+  const managers = jobPeopleNames(jobs).projectManagers;
+  return { ...(representatives.length ? {customerRepresentatives: arrayUnion(...representatives)} : {}), ...(managers.length ? {projectManagers: arrayUnion(...managers)} : {}) };
+}
+
 export const cloudDataService = {
+  subscribeJobPeople(onNames: (names: PeopleNames) => void, onError: (error: Error) => void): Unsubscribe {
+    return onSnapshot(peopleDocument, snapshot => onNames({...emptyPeopleNames, ...(snapshot.exists() ? snapshot.data() : {})} as PeopleNames), onError);
+  },
+  async archiveJob(jobId: string, uid: string) {
+    const archiveRef = doc(db, "archivedJobs", jobId);
+    await runTransaction(db, async transaction => {
+      const jobRef = doc(jobsCollection, jobId);
+      const [jobSnapshot, archiveSnapshot, configSnapshot] = await Promise.all([
+        transaction.get(jobRef), transaction.get(archiveRef), transaction.get(configurationDocument),
+      ]);
+      if (archiveSnapshot.exists() && !jobSnapshot.exists()) return;
+      if (!jobSnapshot.exists() || archiveSnapshot.exists()) throw new Error("This job changed. Refresh Billing before archiving.");
+      const job = jobSnapshot.data() as Job;
+      const config = configSnapshot.data() as Configuration;
+      const complete = (status: string) => config.statuses.some(item => item.name === status && item.code === "COMPLETE");
+      if (!(job.parts?.length ? job.parts.every(part => complete(part.status)) : complete(job.status))) throw new Error("Only completed jobs can be archived.");
+      if (job.billingState !== "approved" && !(job.billingState === undefined && job.billingApprovedAt)) throw new Error("Mark the job OK to bill before archiving.");
+      const historyCodes = [...new Set([job.jobNumber, ...(job.parts || []).map(part => part.code)])];
+      if (historyCodes.some(code => !code || code.includes("/") || code === "." || code === "..")) throw new Error("This legacy barcode cannot be safely locked for archival. The job has not been moved.");
+      const locks = historyCodes.map(code => doc(db, "archiveHistoryLocks", code));
+      const lockSnapshots = await Promise.all(locks.map(ref => transaction.get(ref)));
+      if (lockSnapshots.some(snapshot => snapshot.exists())) throw new Error("History for a matching barcode is already being captured. Finish that archive first.");
+      const names = peopleUpdates([job]);
+      if (Object.keys(names).length) transaction.set(peopleDocument, names, {merge:true});
+      transaction.set(archiveRef, { job, departments: config.departments, statuses: config.statuses, archivedAt: serverTimestamp(), archivedBy: uid, historyStatus: "capturing", historyCodes });
+      locks.forEach(ref => transaction.set(ref, { archiveId: jobId }));
+      transaction.delete(jobRef);
+      transaction.delete(doc(publicJobsCollection, jobId));
+    });
+    await this.finishArchiveHistory(jobId);
+  },
+
+  async finishArchiveHistory(jobId: string) {
+    const archiveRef = doc(db, "archivedJobs", jobId);
+    const snapshot = await getDoc(archiveRef);
+    if (!snapshot.exists()) throw new Error("Archived job not found.");
+    const archive = snapshot.data();
+    if (archive.historyStatus === "complete") return;
+    if (archive.historyStatus !== "capturing") throw new Error("This older archive has no history capture. No history was invented.");
+    // Source events are frozen by the archive ID and temporary barcode locks.
+    // Deterministic document IDs make interrupted batches safe to retry.
+    const events = await readJobEventDocuments(archive.job as Job);
+    for (let index = 0; index < events.length; index += 15) {
+      const batch = writeBatch(db);
+      events.slice(index, index + 15).forEach(event => batch.set(doc(archiveRef, "events", event.id), event.data()));
+      await batch.commit();
+    }
+    await runTransaction(db, async transaction => {
+      const current = await transaction.get(archiveRef);
+      if (current.data()?.historyStatus === "complete") return;
+      transaction.update(archiveRef, { historyStatus: "complete", historyEventCount: events.length, historyCapturedAt: serverTimestamp() });
+      (archive.historyCodes as string[]).forEach(code => transaction.delete(doc(db, "archiveHistoryLocks", code)));
+    });
+  },
+
+  async loadJobHistory(job: Job) {
+    return (await readJobEventDocuments(job)).map(event => ({ ...event.data(), id: event.id } as ScanEvent));
+  },
+
+  async loadArchiveHistory(jobId: string) {
+    const result: ScanEvent[] = [];
+    let cursor: DocumentSnapshot | undefined;
+    while (true) {
+      const page = await getDocsFromServer(query(collection(db, "archivedJobs", jobId, "events"), orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(200)));
+      result.push(...page.docs.map(event => ({ ...event.data(), id: event.id } as ScanEvent)));
+      if (page.size < 200) return result;
+      cursor = page.docs.at(-1);
+    }
+  },
+
+  async loadArchivedJobs(sort: import("./archiveTypes").ArchiveSort, cursor?: DocumentSnapshot) {
+    const fields = { newest: ["archivedAt", "desc"], oldest: ["archivedAt", "asc"], job: ["job.jobNumber", "asc"], customer: ["job.customer", "asc"] } as const;
+    const [field, direction] = fields[sort];
+    const snapshot = await getDocs(query(collection(db, "archivedJobs"), orderBy(field, direction), ...(cursor ? [startAfter(cursor)] : []), limit(25)));
+    return { records: snapshot.docs.map(item => ({ id: item.id, ...item.data() } as import("./archiveTypes").ArchivedJob)), cursor: snapshot.docs.at(-1), hasMore: snapshot.size === 25 };
+  },
   subscribeJobIntake(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {
     let configuration: Configuration | null = null;
     let jobs: Job[] = [];
@@ -110,10 +213,13 @@ export const cloudDataService = {
     return () => unsubscribers.forEach(unsubscribe => unsubscribe());
   },
 
-  async createJobFromIntake(job: Job) {
+  async createJobFromIntake(job: Job, rememberSharedNames = false) {
+    job = rememberJobPeople(job);
     const batch = writeBatch(db);
     batch.set(doc(jobsCollection, job.id), firestoreDocument(job));
     batch.set(doc(publicJobsCollection, job.id), publicJob(job));
+    const names = peopleUpdates([job]);
+    if (rememberSharedNames && Object.keys(names).length) batch.set(peopleDocument, names, {merge:true});
     await batch.commit();
   },
 
@@ -246,7 +352,7 @@ export const cloudDataService = {
     await batch.commit();
   },
 
-  async saveChanges(previous: AppState, next: AppState, uid: string) {
+  async saveChanges(previous: AppState, next: AppState, uid: string, rememberSharedNames = false) {
     const batch = writeBatch(db);
     let writes = 0;
     if (changed(configurationOf(previous), configurationOf(next))) {
@@ -257,8 +363,12 @@ export const cloudDataService = {
 
     const previousJobs = new Map(previous.jobs.map(job => [job.id, job]));
     const nextJobs = new Map(next.jobs.map(job => [job.id, job]));
+    const peopleChanged = next.jobs.filter(job => {const old = previousJobs.get(job.id); return !old || old.customerRepresentative !== job.customerRepresentative || old.projectManager !== job.projectManager;});
+    const names = peopleUpdates([...peopleChanged, ...peopleChanged.flatMap(job => previousJobs.get(job.id) ? [previousJobs.get(job.id)!] : [])]);
+    if (rememberSharedNames && Object.keys(names).length) { batch.set(peopleDocument, names, {merge:true}); writes++; }
     next.jobs.forEach(job => {
       if (changed(previousJobs.get(job.id), job)) {
+        job = rememberJobPeople(job, previousJobs.get(job.id));
         batch.set(doc(jobsCollection, job.id), firestoreDocument(job));
         if (isClosed(job, next)) batch.delete(doc(publicJobsCollection, job.id));
         else batch.set(doc(publicJobsCollection, job.id), publicJob(job));

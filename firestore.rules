@@ -51,7 +51,9 @@ service cloud.firestore {
 
     match /jobs/{jobId} {
       allow read: if canView() || hasRole(['job_creator']);
-      allow create: if canCreateJobs()
+      allow create: if !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && !exists(/databases/$(database)/documents/archiveHistoryLocks/$(request.resource.data.jobNumber))
+        && canCreateJobs()
         && (!hasRole(['job_creator']) || request.resource.data.createdBy == request.auth.uid);
       allow delete: if hasRole(['super_admin', 'admin', 'manager']);
       allow update: if canManageProduction()
@@ -61,10 +63,63 @@ service cloud.firestore {
         ));
     }
 
+    // Immutable full snapshots. Deploy these rules before enabling the Archive UI.
+    match /archivedJobs/{jobId} {
+      allow read: if canManageAdministration();
+      allow create: if canManageAdministration()
+        && request.resource.data.keys().hasOnly(['job', 'departments', 'statuses', 'archivedAt', 'archivedBy', 'historyStatus', 'historyCodes'])
+        && request.resource.data.job == get(/databases/$(database)/documents/jobs/$(jobId)).data
+        && (request.resource.data.job.get('billingState', '') == 'approved'
+          || (!('billingState' in request.resource.data.job) && 'billingApprovedAt' in request.resource.data.job))
+        && request.resource.data.departments == get(/databases/$(database)/documents/configuration/plantflow).data.departments
+        && request.resource.data.statuses == get(/databases/$(database)/documents/configuration/plantflow).data.statuses
+        && request.resource.data.historyStatus == "capturing"
+        && request.resource.data.historyCodes is list
+        && request.resource.data.archivedBy == request.auth.uid
+        && request.resource.data.archivedAt == request.time
+        && !existsAfter(/databases/$(database)/documents/jobs/$(jobId))
+        && !existsAfter(/databases/$(database)/documents/publicJobs/$(jobId));
+      allow update: if canManageAdministration()
+        && resource.data.historyStatus == 'capturing'
+        && request.resource.data.historyStatus == 'complete'
+        && request.resource.data.historyCapturedAt == request.time
+        && request.resource.data.historyEventCount is int
+        && request.resource.data.historyEventCount >= 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['historyStatus', 'historyCapturedAt', 'historyEventCount']);
+      allow delete: if false;
+      match /events/{eventId} {
+        allow read: if canManageAdministration();
+        allow create, update: if canManageAdministration()
+          && get(/databases/$(database)/documents/archivedJobs/$(jobId)).data.historyStatus == 'capturing'
+          && request.resource.data == get(/databases/$(database)/documents/scanEvents/$(eventId)).data
+          && (request.resource.data.get('jobId', '') == jobId
+            || (!('jobId' in request.resource.data)
+              && request.resource.data.jobNumber in get(/databases/$(database)/documents/archivedJobs/$(jobId)).data.historyCodes));
+        allow delete: if false;
+      }
+    }
+
+    match /archiveHistoryLocks/{code} {
+      allow read: if canManageAdministration();
+      allow create: if canManageAdministration()
+        && request.resource.data.keys().hasOnly(['archiveId'])
+        && getAfter(/databases/$(database)/documents/archivedJobs/$(request.resource.data.archiveId)).data.historyStatus == 'capturing'
+        && code in getAfter(/databases/$(database)/documents/archivedJobs/$(request.resource.data.archiveId)).data.historyCodes;
+      allow delete: if canManageAdministration()
+        && getAfter(/databases/$(database)/documents/archivedJobs/$(resource.data.archiveId)).data.historyStatus == 'complete';
+      allow update: if false;
+    }
+
+    function historyWritable(data) {
+      return !exists(/databases/$(database)/documents/archiveHistoryLocks/$(data.jobNumber))
+        && (!('jobId' in data) || !exists(/databases/$(database)/documents/archivedJobs/$(data.jobId)));
+    }
+
     match /scanEvents/{eventId} {
       allow read: if canView();
-      allow create, update: if canManageProduction();
-      allow delete: if hasRole(['super_admin', 'admin']);
+      allow create: if canManageProduction() && historyWritable(request.resource.data);
+      allow update: if canManageProduction() && historyWritable(resource.data) && historyWritable(request.resource.data);
+      allow delete: if hasRole(['super_admin', 'admin']) && historyWritable(resource.data);
     }
 
     match /publicConfiguration/{documentId} {
@@ -74,7 +129,9 @@ service cloud.firestore {
 
     match /publicJobs/{jobId} {
       allow read: if true;
-      allow create: if canCreateJobs()
+      allow create: if !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && !exists(/databases/$(database)/documents/archiveHistoryLocks/$(request.resource.data.jobNumber))
+        && canCreateJobs()
         && (!hasRole(['job_creator']) || request.resource.data.createdBy == request.auth.uid);
       allow delete: if hasRole(['super_admin', 'admin', 'manager']);
       allow update: if canManageProduction()

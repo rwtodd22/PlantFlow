@@ -1,0 +1,15 @@
+import { useEffect, useRef, useState } from "react";
+import type { PeopleNames } from "../lib/jobPeople";
+import { cleanPersonName,uniquePersonNames } from "../lib/jobPeople";
+import type { Job } from "../lib/dataService";
+export function JobPeopleFields({names,job,onChange}:{names:PeopleNames;job?:Pick<Job,"customerRepresentative"|"projectManager">;onChange?:(field:"customerRepresentative"|"projectManager",value:string)=>void}){
+ return <><PersonField label="Customer Representative" field="customerRepresentative" names={names.customerRepresentatives} initial={job?.customerRepresentative||""} onChange={onChange}/><PersonField label="Project Manager" field="projectManager" names={names.projectManagers} initial={job?.projectManager||""} onChange={onChange}/></>;
+}
+function PersonField({label,field,names,initial,onChange}:{label:string;field:"customerRepresentative"|"projectManager";names:string[];initial:string;onChange?:(field:"customerRepresentative"|"projectManager",value:string)=>void}){
+ const [value,setValue]=useState(initial);const [adding,setAdding]=useState(false);const [draft,setDraft]=useState("");const root=useRef<HTMLDivElement>(null);
+ const options=uniquePersonNames([...names,value]);
+ const choose=(next:string)=>{setValue(next);onChange?.(field,next);};
+ useEffect(()=>{const form=root.current?.closest("form");const reset=()=>{setValue(initial);setAdding(false);setDraft("");};form?.addEventListener("reset",reset);return()=>form?.removeEventListener("reset",reset);},[initial]);
+ return <div ref={root} className="person-field"><label><span>{label}</span><select aria-label={label} name={field} value={value} onChange={event=>{if(event.target.value==="__add_new_person__"){setAdding(true);setDraft("");}else{choose(event.target.value);setAdding(false);}}}><option value="">Not assigned</option>{options.map(name=><option key={name} value={name}>{name}</option>)}<option value="__add_new_person__">+ Add New</option></select></label>{adding&&<div className="person-add"><label><span>New {label}</span><input autoFocus aria-label={`New ${label}`} value={draft} maxLength={120} onChange={event=>setDraft(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();const name=cleanPersonName(draft);if(name){choose(options.find(item=>item.toLocaleLowerCase()===name.toLocaleLowerCase())||name);setAdding(false);}}}}/></label><div><button type="button" className="secondary" disabled={!cleanPersonName(draft)} onClick={()=>{const name=cleanPersonName(draft);choose(options.find(item=>item.toLocaleLowerCase()===name.toLocaleLowerCase())||name);setAdding(false);}}>Use name</button><button type="button" className="secondary" onClick={()=>setAdding(false)}>Cancel</button></div><small>Saved for reuse when the job is saved.</small></div>}</div>;
+}
+export function JobPeopleInfo({job}:{job:Pick<Job,"customerRepresentative"|"projectManager">}){return <dl className="job-people-info"><div><dt>Customer Representative</dt><dd>{job.customerRepresentative||"Not assigned"}</dd></div><div><dt>Project Manager</dt><dd>{job.projectManager||"Not assigned"}</dd></div></dl>;}
