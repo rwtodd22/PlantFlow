@@ -1,6 +1,7 @@
 import {JobPeopleFields,JobPeopleInfo} from "./JobPeopleFields";
 import {emptyPeopleNames,jobPeopleNames,peopleFromForm,type PeopleNames} from "../lib/jobPeople";
 import { DepartmentHistory } from "./DepartmentHistory";
+import type {ProductionReturn} from "../lib/returnToProduction";
 import { ReadyForBilling } from "./ReadyForBilling";
 import { ArchivePanel } from "./ArchivePanel";
 "use client";
@@ -192,7 +193,7 @@ function withCompletionMetadata(previousState: typeof seedState, nextState: type
         };
       }
       if (wasComplete || job.completedAt || job.billingState || job.billingNote || job.billingApprovedAt || job.billingClearedAt) {
-        return { ...job, completedAt: undefined, billingState: undefined, billingNote: undefined, billingApprovedAt: undefined, billingClearedAt: undefined };
+        return { ...job, completedAt: undefined, billingState: undefined, billingApprovedAt: undefined, billingClearedAt: undefined };
       }
       return job;
     }),
@@ -854,6 +855,13 @@ export default function Home() {
     }
   };
 
+  const returnToProduction = async (jobId: string, changes: ProductionReturn[]) => {
+    if (!hasAdministrationAccess || cloudStatus !== "ready") throw new Error("Connect to PlantFlow as an administrator before returning a job.");
+    const result = await cloudDataService.returnToProduction(jobId, changes, user.uid);
+    setState(current => {const next={...current,jobs:current.jobs.map(job=>job.id===jobId?result.job:job),scans:[...result.events,...current.scans.filter(scan=>!result.events.some(event=>event.id===scan.id))]};dataService.save(next);return next;});
+    setNotice({kind:"success",title:"Job returned to production",detail:"The job is back in Active Jobs and the Live Dashboard. Billing approval was removed; notes and history were kept."});
+  };
+
   const updateBillingDetails = (jobId: string, updates: Pick<Job,"billingState"|"billingNote">) => {
     const now = new Date().toISOString();
     persist({
@@ -1084,7 +1092,7 @@ export default function Home() {
       {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>The newest 300 movements load instantly. Older records remain in Firestore and can be loaded in pages.</p></div><span className="count-pill">{historyScans.length} loaded</span></div><div className="history-list">{historyScans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div>{historyHasMore&&<div className="history-load-more"><button type="button" className="secondary" disabled={historyLoading} onClick={()=>void loadOlderHistory()}>{historyLoading?"Loading older history…":"Load 250 older movements"}</button><small>Loading older pages does not affect live scanner performance.</small></div>}</section>}
 
       {page === "admin" && hasAdministrationAccess && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<JobIntakeAdminCard/><ProductionPortalAdminCard/><ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} jobs={state.jobs} settings={state.settings} cloudStatus={cloudStatus} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} /><DataMaintenancePanel jobCount={state.jobs.length} onClearAllJobs={clearAllJobData}/></>}
-      {page === "billing" && hasAdministrationAccess && <><ReadyForBilling canArchive={rememberSharedNames} standalone jobs={state.jobs} statuses={statuses} onApprove={approveForBilling} onClear={archiveFromBilling} archiveBusy={archiveBusy} onUpdate={updateBillingDetails}/>{rememberSharedNames?<ArchivePanel revision={archiveRevision} loadPage={loadArchivePage} loadHistory={loadArchiveEvents} resumeHistory={resumeArchiveHistory}/>:<p>Archive access requires an Admin or Super Admin.</p>}</>}
+      {page === "billing" && hasAdministrationAccess && <><ReadyForBilling departments={departments} onReturn={returnToProduction} canArchive={rememberSharedNames} standalone jobs={state.jobs} statuses={statuses} onApprove={approveForBilling} onClear={archiveFromBilling} archiveBusy={archiveBusy} onUpdate={updateBillingDetails}/>{rememberSharedNames?<ArchivePanel revision={archiveRevision} loadPage={loadArchivePage} loadHistory={loadArchiveEvents} resumeHistory={resumeArchiveHistory}/>:<p>Archive access requires an Admin or Super Admin.</p>}</>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE LABEL</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details">{printJob.customer&&<b>{printJob.customer}</b>}{printJob.description&&<span>{printJob.description}</span>}<span>Due {formatDate(printJob.dueDate)}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
     {printPart && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber} · {printPart.job.customer}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div></OverlayPortal>}

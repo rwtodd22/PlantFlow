@@ -9,7 +9,7 @@ await env.clearFirestore();
 const admin=env.authenticatedContext('admin').firestore();globalThis.archiveTestDb=admin;
 mkdirSync('tests/generated',{recursive:true});
 writeFileSync('tests/generated/db.mjs','export const db=globalThis.archiveTestDb;');
-for(const file of ['dataService','jobPeople','cloudDataService']){let source=readFileSync(`lib/${file}.ts`,'utf8');source=source.replace('"../src/firebase"','"./db.mjs"').replace('"./dataService"','"./dataService.mjs"').replace('"./jobPeople"','"./jobPeople.mjs"');writeFileSync(`tests/generated/${file}.mjs`,ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText);}
+for(const file of ['dataService','jobPeople','returnToProduction','cloudDataService']){let source=readFileSync(`lib/${file}.ts`,'utf8');source=source.replace('"../src/firebase"','"./db.mjs"').replace('"./dataService"','"./dataService.mjs"').replace('"./jobPeople"','"./jobPeople.mjs"').replace("'./returnToProduction'","'./returnToProduction.mjs'");writeFileSync(`tests/generated/${file}.mjs`,ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText);}
 const {cloudDataService:service}=await import('./generated/cloudDataService.mjs');
 const {seedState}=await import('./generated/dataService.mjs');
 const job={...seedState.jobs[0],id:'job-one',customerRepresentative:'Test Representative',projectManager:'Test Manager',status:'Complete',billingState:'approved',billingApprovedAt:'2026-10-01T00:00:00Z',notes:'Original production notes',billingNote:'PO 123',parts:[{id:'part-a',code:'590036-A',name:'Panel',description:'Full details',quantity:'3',currentDepartmentId:'ship',status:'Complete',updatedAt:'2026-10-01T00:00:00Z'}]};
@@ -82,4 +82,6 @@ await service.archiveJob(expired.id,'admin');assert.deepEqual((await getDoc(doc(
 console.log('PASS: old Clear/queued-cleanup batches denied atomically; current job and public copy retained; unrelated batch writes rolled back; normal scanning/editing/public cleanup allowed; exact-copy archive succeeds; reset job deletion denied. LIMIT: separate legacy reset scan deletion still allowed.');
 const {testMistakenJobDeletion}=await import('./mistaken-job-deletion.mjs');
 await testMistakenJobDeletion(env,service,job);
+const {testProductionReturn}=await import('./return-to-production.mjs');
+await testProductionReturn(env,service,job,seedState);
 await env.cleanup();

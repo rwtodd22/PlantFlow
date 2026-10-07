@@ -41,3 +41,13 @@
 
 /* Saved job people and local review surfaces. */
 .person-field{min-width:0}.person-field label{display:grid;gap:8px}.person-field select,.person-field input{width:100%;min-height:42px}.person-add{padding:12px;background:#edf4f1;border-radius:8px;margin-top:8px}.person-add button{margin:8px 8px 8px 0}.job-people-info{display:flex;flex-wrap:wrap;gap:24px}.job-people-info dt{font-size:12px;color:#526578}.job-people-info dd{margin:6px 0;font-weight:600}.department-route ol{display:flex;flex-wrap:wrap;gap:10px;list-style:none;padding:0}.department-route li{padding:12px;background:#edf4f1;border:1px solid #cddbd4;border-radius:8px}.department-route li:not(:last-child)::after{content:" →"}.department-route li span{display:block;font-size:12px;margin-top:5px}.history-scan-details summary{cursor:pointer;font-weight:700;padding:16px 0}.recorded-scans{padding-left:24px}.recorded-scans li{padding:10px;border-bottom:1px solid #dce5e0}.recorded-scans li>*{display:block;margin:4px 0}.preview-nav{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0}.preview-nav button[aria-pressed=true]{background:#176448;color:white}.preview-form{padding:24px;margin:20px 0}.preview-form button{margin:12px 12px 12px 0}
+/* Billing return controls reuse theme-aware form colors. */
+.return-production-dialog{max-height:90vh;overflow:auto;width:min(720px,94vw)}
+.return-production-dialog fieldset{border:0;padding:0;margin:0;min-width:0}
+.return-production-row{padding:14px 0;border-bottom:1px solid var(--line)}
+.return-production-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.return-production-fields label{display:grid;gap:6px;min-width:0}
+.return-production-fields select{width:100%;min-height:44px;font:inherit}
+.return-part-choice{display:flex;align-items:center;gap:10px}
+.return-part-choice input{width:20px;height:20px}
+@media(max-width:560px){.return-production-fields{grid-template-columns:1fr}}

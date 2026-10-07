@@ -4,6 +4,20 @@ PlantFlow is a browser-based production tracker for Worth Higgins & Associates. 
 
 ## Local development
 
+### Return a completed job to production
+
+Administrators can choose **Return to Production** beside a job in Ready for
+Billing. Choose an active status and department, or choose the specific parts to
+reopen. The online transaction refreshes the job/configuration, refuses archived
+or deletion-pending records, clears completion/approval metadata, retains both
+production and billing notes, restores the public copy, and records each change
+in movement history. A failure leaves the dialog open without an optimistic
+success. Up to five parts can be returned atomically within Firestore's security
+rule access limits; additional parts can then be changed in Active Jobs.
+Existing deployed rules support this operation; no new rules publication is
+needed. Regression coverage is included in `tests/return-to-production.mjs` via
+the emulator suite.
+
 ### Administrator mistaken-job deletion (2026-10-07, coordinated rollout)
 
 Deploy the reviewed `firestore.rules` together with this application change. Do not

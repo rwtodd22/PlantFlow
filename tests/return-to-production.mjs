@@ -1,0 +1,30 @@
+import {doc,setDoc,getDoc} from 'firebase/firestore';
+import assert from 'node:assert/strict';
+export async function testProductionReturn(env,service,template,seedState) {
+  const db=env.authenticatedContext('admin').firestore();
+  const status=seedState.statuses.find(s=>s.enabled&&!s.closesJob).name;
+  const departmentId=seedState.departments.find(d=>d.enabled).id;
+  const seed=job=>env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'jobs',job.id),job));
+  const job={...template,id:'return-single',jobNumber:'RETURN',parts:[],billingNote:'Keep billing note',notes:'Keep production note'};
+  await seed(job);
+  await assert.rejects(service.returnToProduction(template.id,[{status,departmentId}],'admin'),/Archived/);
+  await assert.rejects(service.returnToProduction(job.id,[{status:'Complete',departmentId}],'admin'),/active production/);
+  await assert.rejects(service.returnToProduction(job.id,[],'admin'),/Choose/);
+  const result=await service.returnToProduction(job.id,[{status,departmentId}],'admin');
+  assert.equal(result.job.status,status);assert.equal(result.job.billingNote,job.billingNote);assert.equal(result.job.notes,job.notes);
+  for(const key of ['completedAt','billingState','billingApprovedAt','billingClearedAt'])assert.equal(key in result.job,false);
+  assert.equal((await getDoc(doc(db,'publicJobs',job.id))).data().status,status);
+  assert.equal((await getDoc(doc(db,'scanEvents',result.events[0].id))).data().statusClosesJob,false);
+  await assert.rejects(service.returnToProduction(job.id,[{status,departmentId}],'admin'),/no longer/);
+  const split={...template,id:'return-split',jobNumber:'RETURN-SPLIT',parts:Array.from({length:26},(_,i)=>({...template.parts[0],id:`return-${i}`,code:`RETURN-${i}`}))};
+  await seed(split);
+  const one=await service.returnToProduction(split.id,[{partId:split.parts[0].id,status,departmentId}],'admin');
+  assert.equal(one.job.parts[0].status,status);assert.equal(one.job.parts[1].status,'Complete');
+  assert.equal(one.events[0].partId,split.parts[0].id);
+  await seed(split);
+  await assert.rejects(service.returnToProduction(split.id,split.parts.map(p=>({partId:p.id,status,departmentId})),'admin'),/five parts/);
+  assert.ok((await getDoc(doc(db,'jobs',split.id))).data().parts.every(p=>p.status==='Complete'));
+  const all=await service.returnToProduction(split.id,split.parts.slice(0,5).map(p=>({partId:p.id,status,departmentId})),'admin');
+  assert.equal(all.events.length,5);assert.ok(all.job.parts.slice(0,5).every(p=>p.status===status));
+  console.log('PASS: production return, single/split/large job safe limit, billing metadata reset, notes retained, public visibility, history events, stale/archived/invalid rejection.');
+}

@@ -2,6 +2,7 @@ import { cleanPersonName, jobPeopleNames, rememberJobPeople, emptyPeopleNames, t
 import { DocumentReference, DocumentSnapshot, Unsubscribe, arrayUnion, runTransaction, collection, doc, getDoc, getDocs, getDocsFromServer, documentId, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, where, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
+import {prepareProductionReturn, type ProductionReturn} from './returnToProduction';
 
 const configurationDocument = doc(db, "configuration", "plantflow");
 const peopleDocument = doc(db, "configuration", "jobPeople");
@@ -99,6 +100,25 @@ function peopleUpdates(jobs: Job[]) {
 }
 
 export const cloudDataService = {
+  async returnToProduction(jobId: string, changes: ProductionReturn[], uid: string) {
+    const eventIds = changes.map(() => doc(scansCollection).id);
+    return runTransaction(db, async transaction => {
+      const [profile, source, archive, deletion, config] = await Promise.all([
+        transaction.get(doc(db,'users',uid)), transaction.get(doc(jobsCollection,jobId)),
+        transaction.get(doc(db,'archivedJobs',jobId)), transaction.get(doc(db,'jobDeletions',jobId)), transaction.get(configurationDocument),
+      ]);
+      if (!profile.data()?.enabled || !['admin','super_admin'].includes(profile.data()?.role)) throw new Error('Administrator access is required.');
+      if (archive.exists()) throw new Error('Archived billing records cannot be reopened.');
+      if (deletion.exists()) throw new Error('This job is being deleted and cannot be reopened.');
+      if (!source.exists() || !config.exists()) throw new Error('This job is no longer available. Refresh the page.');
+      const configuration = config.data() as Configuration;
+      const result = prepareProductionReturn(source.data() as Job,changes,configuration.departments,configuration.statuses,new Date().toISOString(),eventIds);
+      transaction.set(doc(jobsCollection,jobId),firestoreDocument(result.job));
+      transaction.set(doc(publicJobsCollection,jobId),publicJob(result.job));
+      result.events.forEach(event=>transaction.set(doc(scansCollection,event.id),firestoreDocument(event)));
+      return result;
+    });
+  },
   subscribeJobPeople(onNames: (names: PeopleNames) => void, onError: (error: Error) => void): Unsubscribe {
     return onSnapshot(peopleDocument, snapshot => onNames({...emptyPeopleNames, ...(snapshot.exists() ? snapshot.data() : {})} as PeopleNames), onError);
   },
