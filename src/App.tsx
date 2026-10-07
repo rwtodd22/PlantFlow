@@ -822,14 +822,15 @@ export default function Home() {
     } finally { setArchiveBusy(false); setArchiveRevision(value => value + 1); }
   };
 
-  const deleteJobPermanently = async (job: Job) => {
+  const deleteJobPermanently = async (job: Job, confirmation: string) => {
     try {
-      await cloudDataService.deleteJobPermanently(job);
+      await cloudDataService.deleteJobPermanently(job, user.uid, confirmation);
       const identifiers = new Set([job.jobNumber, ...(job.parts || []).map(part => part.code)]);
-      const next = { ...state, jobs: state.jobs.filter(item => item.id !== job.id), scans: state.scans.filter(scan => !identifiers.has(scan.jobNumber)) };
+      const retainedScan = (scan: ScanEvent) => scan.jobId ? scan.jobId !== job.id : !identifiers.has(scan.jobNumber);
+      const next = { ...state, jobs: state.jobs.filter(item => item.id !== job.id), scans: state.scans.filter(retainedScan) };
       setState(next);
       dataService.save(next);
-      setOlderScans(current => current.filter(scan => !identifiers.has(scan.jobNumber)));
+      setOlderScans(current => current.filter(retainedScan));
       setSelectedJob(null);
       setNotice({ kind: "success", title: `Job ${job.jobNumber} permanently deleted`, detail: "The job, its parts, and all movement history were removed. This job number can now be used again." });
     } catch (error) {
@@ -1398,7 +1399,7 @@ function DailyBriefReport({state,onClose,onPrint}:{state:typeof seedState;onClos
 
 function ReportTable({title,headers,rows,rowClassName}:{title:string;headers:string[];rows:(string|number)[][];rowClassName?:(row:(string|number)[],index:number)=>string}) { return <section className="report-table"><h3>{title}</h3><table><thead><tr>{headers.map(header=><th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={index} className={rowClassName?.(row,index)||""}>{row.map((cell,cellIndex)=><td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>{!rows.length&&<p>No matching records.</p>}</section> }
 
-function ActiveJobDeleteAction({job,onDelete}:{job:Job;onDelete:(job:Job)=>void|Promise<void>}) {
+function ActiveJobDeleteAction({job,onDelete}:{job:Job;onDelete:(job:Job,confirmation:string)=>void|Promise<void>}) {
   const [open,setOpen]=useState(false);
   const [confirmationText,setConfirmationText]=useState("");
   const [deleting,setDeleting]=useState(false);
@@ -1410,7 +1411,7 @@ function ActiveJobDeleteAction({job,onDelete}:{job:Job;onDelete:(job:Job)=>void|
     setDeleting(true);
     setDeleteError("");
     try {
-      await onDelete(job);
+      await onDelete(job, confirmationText);
       setOpen(false);
       setConfirmationText("");
     } catch(error) {

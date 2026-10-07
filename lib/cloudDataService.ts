@@ -22,14 +22,6 @@ async function deleteDocumentsInBatches(documents: Array<{ ref: DocumentReferenc
   }
 }
 
-async function clearCollection(collectionReference: typeof jobsCollection) {
-  while (true) {
-    const snapshot = await getDocs(query(collectionReference, limit(450)));
-    if (snapshot.empty) return;
-    await deleteDocumentsInBatches(snapshot.docs);
-  }
-}
-
 /**
  * Firestore rejects `undefined` anywhere in a document. Optional application
  * fields (job parts and scan metadata) are represented as `undefined` in
@@ -223,14 +215,62 @@ export const cloudDataService = {
     await batch.commit();
   },
 
-  async deleteJobPermanently(job: Job) {
-    const identifiers = [job.jobNumber, ...(job.parts || []).map(part => part.code)];
-    const scanSnapshot = await getDocs(query(scansCollection, where("jobNumber", "in", identifiers)));
-    await deleteDocumentsInBatches([
-      { ref: doc(jobsCollection, job.id) },
-      { ref: doc(publicJobsCollection, job.id) },
-      ...scanSnapshot.docs,
-    ]);
+  async deleteJobPermanently(job: Job, uid: string, confirmation: string) {
+    if (!uid || confirmation.trim() !== `DELETE ${job.jobNumber}`) throw new Error("Type the exact deletion phrase to continue.");
+    const jobRef = doc(jobsCollection, job.id);
+    const receiptRef = doc(db, "jobDeletions", job.id);
+    // Keep the job/number reserved until history cleanup succeeds. The receipt
+    // freezes edits and permits an interrupted operation to be safely retried.
+    const pending = await runTransaction(db, async transaction => {
+      const [source, receipt, archive] = await Promise.all([
+        transaction.get(jobRef), transaction.get(receiptRef), transaction.get(doc(db, "archivedJobs", job.id)),
+      ]);
+      if (archive.exists()) throw new Error("Billing archives cannot be permanently deleted.");
+      if (receipt.exists()) {
+        if (receipt.data().jobNumber !== job.jobNumber) throw new Error("The job number has changed. Reopen the job before deleting.");
+        return receipt.data().state === "complete" ? null : receipt.data().job as Job;
+      }
+      if (!source.exists()) throw new Error("This job no longer exists. Refresh the job list.");
+      const current = source.data() as Job;
+      if (current.jobNumber !== job.jobNumber) throw new Error("The job number has changed. Reopen the job before deleting.");
+      if (current.billingState === "approved" || (!("billingState" in current) && current.billingApprovedAt)) throw new Error("This job is OK to bill. Remove billing approval before deleting a mistaken job.");
+      const codes = [...new Set([current.jobNumber, ...(current.parts || []).map(part => part.code)])];
+      if (codes.some(code => !code || code.includes("/"))) throw new Error("This job contains an invalid barcode. Correct it before deleting.");
+      const locks = await Promise.all(codes.map(code => transaction.get(doc(db, "deletionHistoryLocks", code))));
+      if (locks.some(lock => lock.exists())) throw new Error("Another deletion is using this barcode. Finish that deletion first.");
+      transaction.set(receiptRef, { job: current, jobNumber: current.jobNumber, codes, state: "pending", requestedBy: uid, requestedAt: serverTimestamp(), confirmation: confirmation.trim() });
+      return current;
+    });
+    if (!pending) return;
+    const codes = [...new Set([pending.jobNumber, ...(pending.parts || []).map(part => part.code)])];
+    // Acquire barcode locks in small transactions so 26-part jobs stay within
+    // Firestore's per-request rules access budget. Retry existing owned locks.
+    for (let index = 0; index < codes.length; index += 10) {
+      await runTransaction(db, async transaction => {
+        const refs = codes.slice(index, index + 10).map(code => doc(db, "deletionHistoryLocks", code));
+        const locks = await Promise.all(refs.map(ref => transaction.get(ref)));
+        locks.forEach((lock, offset) => {
+          if (lock.exists() && lock.data().jobId !== job.id) throw new Error("Another deletion is using this barcode. Finish that deletion first.");
+          if (!lock.exists()) transaction.set(refs[offset], {jobId: job.id});
+        });
+      });
+    }
+    // Small batches stay within rules document-access limits even for old,
+    // renamed barcodes. No arbitrary 300-event history cutoff.
+    const events = await readJobEventDocuments(pending);
+    for (let index = 0; index < events.length; index += 10) {
+      await deleteDocumentsInBatches(events.slice(index, index + 10));
+    }
+    await runTransaction(db, async transaction => {
+      const receipt = await transaction.get(receiptRef);
+      if (receipt.data()?.state === "complete") return;
+      if (receipt.data()?.state !== "pending") throw new Error("Deletion authorization is missing. Please retry.");
+      const {job: _snapshot, ...audit} = receipt.data()!;
+      transaction.set(receiptRef, {...audit, state: "complete", completedAt: serverTimestamp(), completedBy: uid});
+      transaction.delete(jobRef);
+      transaction.delete(doc(publicJobsCollection, job.id));
+      (audit.codes as string[]).forEach(code => transaction.delete(doc(db, "deletionHistoryLocks", code)));
+    });
   },
 
   async deletePartHistory(partCode: string) {
@@ -239,9 +279,8 @@ export const cloudDataService = {
   },
 
   async clearAllJobData() {
-    await clearCollection(scansCollection);
-    await clearCollection(publicJobsCollection);
-    await clearCollection(jobsCollection);
+    // Do not erase history/public copies before the protected job delete fails.
+    throw new Error("Bulk reset is disabled to protect billing records. Delete mistaken jobs individually from Review Job.");
   },
 
   subscribe(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {

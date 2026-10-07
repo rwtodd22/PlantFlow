@@ -45,9 +45,64 @@ service cloud.firestore {
       allow write: if canManageAdministration();
     }
 
+    function notDeleted(jobId) {
+      return !exists(/databases/$(database)/documents/jobDeletions/$(jobId));
+    }
+
+    function deletionCompleting(jobId) {
+      return get(/databases/$(database)/documents/jobDeletions/$(jobId)).data.state == 'pending'
+        && getAfter(/databases/$(database)/documents/jobDeletions/$(jobId)).data.state == 'complete'
+        && getAfter(/databases/$(database)/documents/jobDeletions/$(jobId)).data.completedBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/jobDeletions/$(jobId)).data.completedAt == request.time;
+    }
+
+    // Separate explicit administrator workflow, never an archive escape hatch.
+    // Pending snapshots freeze edits during cleanup; only a minimal audit receipt remains.
+    match /jobDeletions/{jobId} {
+      allow read: if canManageAdministration();
+      allow create: if canManageAdministration()
+        && request.resource.data.keys().hasOnly(['job', 'jobNumber', 'codes', 'state', 'requestedBy', 'requestedAt', 'confirmation'])
+        && !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && request.resource.data.job == get(/databases/$(database)/documents/jobs/$(jobId)).data
+        && request.resource.data.jobNumber == request.resource.data.job.jobNumber
+        && request.resource.data.job.get('billingState', '') != 'approved'
+        && ('billingState' in request.resource.data.job || !('billingApprovedAt' in request.resource.data.job))
+        && request.resource.data.codes is list
+        && request.resource.data.jobNumber in request.resource.data.codes
+        && request.resource.data.state == 'pending'
+        && request.resource.data.requestedBy == request.auth.uid
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.confirmation == 'DELETE ' + request.resource.data.jobNumber
+        && existsAfter(/databases/$(database)/documents/jobs/$(jobId));
+      allow update: if canManageAdministration()
+        && resource.data.state == 'pending'
+        && request.resource.data.state == 'complete'
+        && !('job' in request.resource.data)
+        && request.resource.data.completedAt == request.time
+        && request.resource.data.completedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['job', 'state', 'completedAt', 'completedBy'])
+        && !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && !existsAfter(/databases/$(database)/documents/jobs/$(jobId))
+        && !existsAfter(/databases/$(database)/documents/publicJobs/$(jobId));
+      allow delete: if false;
+    }
+
+    match /deletionHistoryLocks/{code} {
+      allow read: if canManageAdministration();
+      allow create: if canManageAdministration()
+        && request.resource.data.keys().hasOnly(['jobId'])
+        && !exists(/databases/$(database)/documents/archiveHistoryLocks/$(code))
+        && getAfter(/databases/$(database)/documents/jobDeletions/$(request.resource.data.jobId)).data.state == 'pending'
+        && code in getAfter(/databases/$(database)/documents/jobDeletions/$(request.resource.data.jobId)).data.codes;
+      allow update: if false;
+      allow delete: if canManageAdministration() && deletionCompleting(resource.data.jobId);
+    }
+
     match /jobs/{jobId} {
       allow read: if canView();
       allow create: if !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && notDeleted(jobId)
+        && !exists(/databases/$(database)/documents/deletionHistoryLocks/$(request.resource.data.jobNumber))
         && !exists(/databases/$(database)/documents/archiveHistoryLocks/$(request.resource.data.jobNumber))
         && canManageProduction();
       // Only remove the active record when this commit preserves its exact snapshot.
@@ -57,7 +112,12 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.historyStatus == 'capturing'
         && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.archivedBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/archivedJobs/$(jobId)).data.archivedAt == request.time;
+      allow delete: if canManageAdministration()
+        && !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && get(/databases/$(database)/documents/jobDeletions/$(jobId)).data.job == resource.data
+        && deletionCompleting(jobId);
       allow update: if canManageProduction()
+        && notDeleted(jobId)
         && (!hasRole(['standard']) || request.resource.data.dueDate == resource.data.dueDate);
     }
 
@@ -65,6 +125,7 @@ service cloud.firestore {
     match /archivedJobs/{jobId} {
       allow read: if canManageAdministration();
       allow create: if canManageAdministration()
+        && notDeleted(jobId)
         && request.resource.data.keys().hasOnly(['job', 'departments', 'statuses', 'archivedAt', 'archivedBy', 'historyStatus', 'historyCodes'])
         && request.resource.data.job == get(/databases/$(database)/documents/jobs/$(jobId)).data
         && (request.resource.data.job.get('billingState', '') == 'approved'
@@ -115,9 +176,15 @@ service cloud.firestore {
 
     match /scanEvents/{eventId} {
       allow read: if canView();
-      allow create: if canManageProduction() && historyWritable(request.resource.data);
-      allow update: if canManageProduction() && historyWritable(resource.data) && historyWritable(request.resource.data);
+      allow create: if canManageProduction() && historyWritable(request.resource.data) && deletionHistoryWritable(request.resource.data);
+      allow update: if canManageProduction() && historyWritable(resource.data) && historyWritable(request.resource.data)
+        && deletionHistoryWritable(resource.data) && deletionHistoryWritable(request.resource.data);
       allow delete: if hasRole(['super_admin', 'admin']) && historyWritable(resource.data);
+    }
+
+    function deletionHistoryWritable(data) {
+      return !exists(/databases/$(database)/documents/deletionHistoryLocks/$(data.jobNumber))
+        && (!('jobId' in data) || notDeleted(data.jobId));
     }
 
     match /publicConfiguration/{documentId} {
@@ -128,10 +195,12 @@ service cloud.firestore {
     match /publicJobs/{jobId} {
       allow read: if true;
       allow create: if !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
+        && notDeleted(jobId)
+        && !exists(/databases/$(database)/documents/deletionHistoryLocks/$(request.resource.data.jobNumber))
         && !exists(/databases/$(database)/documents/archiveHistoryLocks/$(request.resource.data.jobNumber))
         && canManageProduction();
-      allow delete: if canManageProduction();
-      allow update: if canManageProduction();
+      allow delete: if canManageProduction() && (notDeleted(jobId) || (canManageAdministration() && deletionCompleting(jobId)));
+      allow update: if canManageProduction() && notDeleted(jobId);
     }
   }
 }

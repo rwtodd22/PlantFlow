@@ -1,5 +1,5 @@
-import {initializeTestEnvironment} from '../../archive-validation/node_modules/@firebase/rules-unit-testing/dist/esm/index.esm.js';
-import {doc,setDoc,getDoc,deleteDoc,updateDoc} from '../../archive-validation/node_modules/firebase/firestore/dist/index.mjs';
+import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
+import {doc,setDoc,getDoc,deleteDoc,updateDoc} from 'firebase/firestore';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 const results=[];

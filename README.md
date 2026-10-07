@@ -4,6 +4,46 @@ PlantFlow is a browser-based production tracker for Worth Higgins & Associates. 
 
 ## Local development
 
+### Administrator mistaken-job deletion (2026-10-07, coordinated rollout)
+
+Deploy the reviewed `firestore.rules` together with this application change. Do not
+loosen the archive rules or reinstate unrestricted job deletion. A Git push alone
+does not deploy Firestore rules. Compare the live rules before publishing; the
+rules were published with explicit owner approval on 2026-10-07 at 12:16 PM
+America/New_York. The console's saved active version was verified after reload;
+the staged rules matched the tested local file before publication.
+
+Enabled `admin` and `super_admin` profiles may explicitly delete a mistaken job
+after typing `DELETE <job number>`. The typed phrase is an accident-prevention
+measure, not an authentication secret. Firestore enforces the role, exact source
+snapshot, authenticated actor, server timestamp, and separate deletion receipt.
+Approved jobs must first have their billing approval removed. Archived jobs and
+their archived history cannot use this path and remain immutable.
+
+Deletion creates a pending `jobDeletions/<stable job id>` receipt, freezes job
+edits, and locks its current barcodes in `deletionHistoryLocks`. It then deletes
+history in small batches (including stable-ID history under earlier barcodes).
+Only after cleanup does it atomically remove the private/public job, release
+the barcode locks, and complete the receipt. The completed receipt retains the
+job number, barcode list, confirmation, actor IDs, and timestamps—not the job
+snapshot. This prevents stale clients from recreating that job ID while allowing
+the job number to be reused with a new ID. Legacy events without a job ID still
+have only barcode-based attribution, the same limitation as archive capture.
+
+If interrupted, reopen Review Job and repeat the same confirmed deletion; the
+operation resumes. Another enabled administrator may finish it. Do not manually
+delete pending receipts/locks. The old bulk-reset service now refuses **before**
+deleting anything, since its former sequential cleanup could delete history and
+public copies before protected job deletion failed. Old already-open clients
+still have the previously documented legacy-reset limitation; refresh clients
+during rollout.
+
+Validation: `npm run build`; with the local demo Firestore emulator on port 8187,
+`node tests/emulator.mjs` and `node tests/role-compatibility.mjs`. Tests cover
+511-event cleanup, 26-part jobs, denied roles/forgeries, immutable archives and
+receipts, approved-job rejection, interruption/retry, number reuse, and unchanged
+ordinary permissions. Tests use disposable emulator data only.
+
 Requirements: Node.js 22 or newer.
 
 ```bash
