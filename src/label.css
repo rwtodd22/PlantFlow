@@ -4084,6 +4084,13 @@ tr.deadline-overdue .status-pill.green {
 }
 .billing-note-button:hover { border-color: #77a590; background: #f4f9f6; }
 .billing-note-button.has-note { border-color: #a9cbbc; background: #edf7f2; color: #176b4c; }
+.billing-row-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.billing-row-tools .billing-note-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 6px 10px; font-size: 11px; font-weight: 650; line-height: 1.2; white-space: nowrap; }
+.billing-row-tools .billing-return-button { background: transparent; }
+.billing-row-tools .billing-note-button:focus-visible { outline: 2px solid #6ca58e; outline-offset: 2px; }
+.app-theme-dark .billing-row-tools .billing-note-button:hover { background: #303a3d; border-color: #73b79f; color: #8bd0b7; }
+.app-theme-dark .billing-row-tools .billing-note-button.has-note { background: #253f36; border-color: #47745f; color: #a0dbc0; }
+@media (pointer: coarse) { .billing-row-tools .billing-note-button { min-height: 44px; } }
 .billing-note-row td { padding: 0 !important; background: #f7faf8; }
 .billing-note-editor { display: grid; gap: 9px; padding: 13px 15px 15px 50px; border-top: 1px solid #dfe8e3; }
 .billing-note-editor label { display: grid; gap: 6px; }
