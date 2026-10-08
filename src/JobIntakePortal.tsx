@@ -1,4 +1,5 @@
 import {JobPeopleFields} from "./JobPeopleFields";
+import {PortalLoading} from './PortalLoading';
 import {emptyPeopleNames,jobPeopleNames,peopleFromForm} from "../lib/jobPeople";
 import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import JsBarcode from "jsbarcode";
@@ -38,6 +39,7 @@ export default function JobIntakePortal() {
   useEffect(()=>cloudDataService.subscribeJobPeople(setSavedPeople,error=>console.error("Saved names unavailable",error)),[]);
   const peopleNames=useMemo(()=>jobPeopleNames(state.jobs,savedPeople),[state.jobs,savedPeople]);
   const [loading,setLoading]=useState(true);
+  const [startupError,setStartupError]=useState('');
   const [saving,setSaving]=useState(false);
   const [feedback,setFeedback]=useState<Feedback>(null);
   const [dueDate,setDueDate]=useState(()=>localDateValue(3));
@@ -57,8 +59,10 @@ export default function JobIntakePortal() {
 
   useEffect(()=>cloudDataService.subscribeJobIntake(next=>{
     if(next)setState(next);
+    setStartupError(next?'':'The shared workspace is unavailable. Please ask an administrator to check the configuration.');
     setLoading(false);
   },error=>{
+    setStartupError(error.message||'Check the internet connection and try again.');
     setFeedback({kind:"error",title:"PlantFlow could not load",detail:error.message||"Check the internet connection and try again."});
     setLoading(false);
   }),[]);
@@ -157,7 +161,8 @@ export default function JobIntakePortal() {
     }
   };
 
-  if(loading)return <div className="intake-loading"><span/><b>Opening the Job Creation Portal…</b></div>;
+  if(loading)return <PortalLoading title="Opening the Job Creation Portal…" detail="Loading shared job settings"/>;
+  if(startupError)return <div className="auth-screen"><div className="auth-loading"><b>Job Creation Portal unavailable</b><small role="alert">{startupError}</small><button className="secondary" onClick={()=>window.location.reload()}>Try again</button></div></div>;
 
   return <div className={`intake-portal intake-theme-${portalTheme}`}>
     <header className="intake-header"><div className="intake-brand"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><p className="eyebrow">PLANTFLOW JOB INTAKE</p><h1>Job Creation Portal</h1><span>Create a production record and send it directly into PlantFlow.</span></div></div><div className="intake-header-tools"><div className="intake-theme-toggle" role="group" aria-label="Job Creation Portal color mode"><button type="button" className={portalTheme==="light"?"active":""} aria-pressed={portalTheme==="light"} onClick={()=>changePortalTheme("light")}>Light</button><button type="button" className={portalTheme==="dark"?"active":""} aria-pressed={portalTheme==="dark"} onClick={()=>changePortalTheme("dark")}>Dark</button></div><div className="intake-user"><div><b>{profile.displayName||profile.email}</b><small>Job creation access</small></div><button type="button" onClick={()=>void logout()}>Sign out</button></div></div></header>

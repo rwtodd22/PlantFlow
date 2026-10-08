@@ -1,0 +1,15 @@
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const compiled=ts.transpileModule(readFileSync('lib/startupRequest.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {createStartupRequest}=await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+let calls=0,finish;
+const read=createStartupRequest(async key=>{calls++;return new Promise(resolve=>{finish=()=>resolve(key);});},100);
+const a=read('admin'),b=read('admin');assert.equal(a,b);await Promise.resolve();assert.equal(calls,1);finish();assert.equal(await a,'admin');
+const c=read('admin');await Promise.resolve();assert.equal(calls,2);finish();await c;
+let tries=0;
+const retry=createStartupRequest(()=>++tries===1?new Promise(()=>{}):Promise.resolve('fresh'),10);
+await assert.rejects(retry('user'),/taking too long/);assert.equal(await retry('user'),'fresh');
+const denied=createStartupRequest(()=>Promise.reject(new Error('denied')),20);
+await assert.rejects(denied('user'),/denied/);await assert.rejects(denied('user'),/denied/);
+console.log('PASS: concurrent reads shared, completed permissions not cached, stalled reads time out, retry recovers, rejection preserved.');

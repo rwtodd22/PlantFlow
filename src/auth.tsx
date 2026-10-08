@@ -3,6 +3,10 @@ import { User, browserLocalPersistence, onAuthStateChanged, setPersistence, sign
 import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import worthHigginsLogo from "./assets/WHALogo_Horizontal.png";
+import {PortalLoading} from './PortalLoading';
+import {createStartupRequest} from '../lib/startupRequest';
+
+const readAccessProfile=createStartupRequest(uid=>getDoc(doc(db,'users',uid)));
 
 export type UserRole = "super_admin" | "admin" | "standard" | "job_creator" | "manager" | "viewer";
 export type UserProfile = {
@@ -51,8 +55,14 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionError, setSessionError] = useState("");
+  const [attempt,setAttempt]=useState(0);
 
-  useEffect(() => onAuthStateChanged(auth, async nextUser => {
+  useEffect(() => {
+    let generation=0;
+    let disposed=false;
+    const unsubscribe=onAuthStateChanged(auth, async nextUser => {
+    const current=++generation;
+    const active=()=>!disposed&&current===generation;
     setLoading(true);
     setSessionError("");
     setUser(nextUser);
@@ -62,7 +72,8 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
       return;
     }
     try {
-      const snapshot = await getDoc(doc(db, "users", nextUser.uid));
+      const snapshot = await readAccessProfile(nextUser.uid);
+      if(!active())return;
       if (!snapshot.exists()) throw new Error("No PlantFlow access profile exists for this account.");
       const data = snapshot.data() as Omit<UserProfile, "uid">;
       if (!data.enabled) throw new Error("This PlantFlow account has been disabled.");
@@ -82,12 +93,14 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
       setProfile({ ...data, role: effectiveRole, uid: nextUser.uid });
       void updateDoc(doc(db, "users", nextUser.uid), { lastSignInAt: serverTimestamp() }).catch(() => undefined);
     } catch (error) {
+      if(!active())return;
       setSessionError(error instanceof Error ? error.message : "PlantFlow could not load your access profile.");
-      await signOut(auth);
     } finally {
-      setLoading(false);
+      if(active())setLoading(false);
     }
-  }), [access]);
+    });
+    return()=>{disposed=true;generation++;unsubscribe();};
+  }, [access,attempt]);
 
   useEffect(() => {
     if (access !== "production" || profile?.role !== "standard") return;
@@ -120,7 +133,8 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
     };
   }, [access, profile?.role]);
 
-  if (loading) return <div className="auth-screen"><div className="auth-loading"><span className="auth-spinner"/><b>Opening PlantFlow…</b><small>Checking your secure session</small></div></div>;
+  if (loading) return <PortalLoading key={attempt} detail="Checking your secure session" onRetry={()=>setAttempt(value=>value+1)}/>;
+  if (user && !profile && sessionError) return <div className="auth-screen"><div className="auth-loading"><b>Could not open this portal</b><small role="alert">{sessionError}</small><button className="primary" onClick={()=>setAttempt(value=>value+1)}>Try again</button><button className="secondary" onClick={()=>void signOut(auth)}>Sign in with a different account</button></div></div>;
   if (!user || !profile) return <LoginScreen access={access} sessionError={sessionError}/>;
 
   return <AuthContext.Provider value={{ user, profile, logout: async () => { if (profile.role === "standard") window.localStorage.removeItem(productionSessionKey); await signOut(auth); } }}>{children}</AuthContext.Provider>;
