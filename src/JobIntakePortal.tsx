@@ -1,4 +1,5 @@
 import {JobPeopleFields} from "./JobPeopleFields";
+import {includeCreatedJob} from '../lib/intakeJobs';
 import {PortalLoading} from './PortalLoading';
 import {emptyPeopleNames,jobPeopleNames,peopleFromForm} from "../lib/jobPeople";
 import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -100,7 +101,7 @@ export default function JobIntakePortal() {
     setSaving(true);setFeedback(null);
     try{
       await cloudDataService.createJobFromIntake(job,["super_admin","admin"].includes(profile.role));
-      setState(current=>({...current,jobs:[job,...current.jobs]}));
+      setState(current=>({...current,jobs:includeCreatedJob(current.jobs,job)}));
       setFeedback({kind:"success",title:`Job ${jobNumber} created`,detail:`${job.customer} has been added to PlantFlow and is ready for production planning.`});
       setCreatedJob(job);
       if(labelPreviewOpenedFor!==jobNumber)setPrintPreview({jobNumber,customer:job.customer,description:job.description,dueDate:job.dueDate});
