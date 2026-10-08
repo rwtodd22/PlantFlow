@@ -51,3 +51,11 @@
 .return-part-choice{display:flex;align-items:center;gap:10px}
 .return-part-choice input{width:20px;height:20px}
 @media(max-width:560px){.return-production-fields{grid-template-columns:1fr}}
+.saved-people-manager{grid-column:1/-1;border:1px solid var(--line);border-radius:9px;padding:10px 12px;color:var(--ink)}
+.saved-people-manager summary{cursor:pointer;font-size:12px;font-weight:650}
+.saved-people-manager p{font-size:12px;color:var(--muted);margin:10px 0}
+.saved-people-manager section{margin-top:12px;font-size:12px}
+.saved-people-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.saved-people-chips>span{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:3px 4px 3px 9px}
+.saved-people-chips button{background:transparent;color:inherit;border:0;border-radius:4px;min-width:30px;min-height:30px;font-size:18px}
+.saved-people-chips button:hover{background:#b6383318;color:var(--red)}

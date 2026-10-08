@@ -1,3 +1,4 @@
+import {SavedPeopleManager} from "./SavedPeopleManager";
 import {JobPeopleFields} from "./JobPeopleFields";
 import {includeCreatedJob} from '../lib/intakeJobs';
 import {PortalLoading} from './PortalLoading';
@@ -178,7 +179,7 @@ export default function JobIntakePortal() {
         <div className="intake-fields">
           <label><span>PACE job number *</span><input name="jobNumber" required autoFocus placeholder="e.g. 590042" autoComplete="off" value={jobNumber} onChange={event=>{setJobNumber(event.target.value.toUpperCase());if(createdJob)setCreatedJob(null);}}/></label>
           <label><span>Customer *</span><input name="customer" required placeholder="Customer name"/></label>
-          <JobPeopleFields names={peopleNames}/><label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or production description"/></label>
+          <JobPeopleFields names={peopleNames}/>{["admin","super_admin"].includes(profile.role)&&<SavedPeopleManager names={peopleNames}/>}<label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or production description"/></label>
           <label><span>Production due date *</span><input name="dueDate" type="date" required min={localDateValue()} value={dueDate} onChange={event=>setDueDate(event.target.value)}/></label>
           <label><span>Priority</span><select name="priority" defaultValue="Standard"><option>Standard</option><option>Rush</option><option>Critical</option></select></label>
           {state.settings.showStartingLocationOnJobCreation&&<label className="wide intake-location"><span>Starting location <small>Optional</small></span><select name="initialDepartmentId" defaultValue=""><option value="">Not started</option>{enabledDepartments.map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select><small>Leave as Not started unless the job is already physically in production.</small></label>}

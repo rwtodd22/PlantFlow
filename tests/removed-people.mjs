@@ -1,0 +1,13 @@
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const source=ts.transpileModule(readFileSync('lib/jobPeople.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {jobPeopleNames,rememberJobPeople}=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const job={customerRepresentative:'Alice',projectManager:'Alice',savedCustomerRepresentatives:['ALICE','Bob'],savedProjectManagers:['Alice']};
+const original=structuredClone(job);
+const saved={customerRepresentatives:['Alice'],projectManagers:['Alice'],removedCustomerRepresentatives:[' alice ']};
+assert.deepEqual(jobPeopleNames([job],saved),{customerRepresentatives:['Bob'],projectManagers:['Alice']});
+assert.deepEqual(job,original);
+assert.deepEqual(jobPeopleNames([rememberJobPeople(job)],saved),{customerRepresentatives:['Bob'],projectManagers:['Alice']});
+assert.deepEqual(jobPeopleNames([],saved),{customerRepresentatives:[],projectManagers:['Alice']});
+console.log('PASS: removed suggestions stay hidden, case/space normalization, independent lists, existing job names unchanged.');

@@ -100,6 +100,15 @@ function peopleUpdates(jobs: Job[]) {
 }
 
 export const cloudDataService = {
+  async removeSavedPerson(field: "customerRepresentative" | "projectManager", name: string) {
+    const cleaned=cleanPersonName(name);
+    if(!cleaned)return;
+    // Keep a suppression marker so old jobs cannot repopulate a removed suggestion.
+    // Existing configuration rules restrict this shared-list change to admins.
+    const batch=writeBatch(db);
+    batch.set(peopleDocument,{[field==='customerRepresentative'?'removedCustomerRepresentatives':'removedProjectManagers']:arrayUnion(cleaned)},{merge:true});
+    await batch.commit();
+  },
   async returnToProduction(jobId: string, changes: ProductionReturn[], uid: string) {
     const eventIds = changes.map(() => doc(scansCollection).id);
     return runTransaction(db, async transaction => {
