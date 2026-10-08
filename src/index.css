@@ -51,11 +51,16 @@
 .return-part-choice{display:flex;align-items:center;gap:10px}
 .return-part-choice input{width:20px;height:20px}
 @media(max-width:560px){.return-production-fields{grid-template-columns:1fr}}
-.saved-people-manager{grid-column:1/-1;border:1px solid var(--line);border-radius:9px;padding:10px 12px;color:var(--ink)}
-.saved-people-manager summary{cursor:pointer;font-size:12px;font-weight:650}
-.saved-people-manager p{font-size:12px;color:var(--muted);margin:10px 0}
-.saved-people-manager section{margin-top:12px;font-size:12px}
-.saved-people-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.saved-people-chips>span{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:3px 4px 3px 9px}
-.saved-people-chips button{background:transparent;color:inherit;border:0;border-radius:4px;min-width:30px;min-height:30px;font-size:18px}
-.saved-people-chips button:hover{background:#b6383318;color:var(--red)}
+.person-field{position:relative}
+.person-field-label{display:block;margin-bottom:8px;font-size:inherit;font-weight:600}
+.person-field .person-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;text-align:left}
+.person-choices{position:absolute;top:100%;left:0;right:0;z-index:30;max-height:280px;overflow:auto;padding:4px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #0002}
+.person-choice-row{display:flex;align-items:center;border-radius:5px}
+.person-field .person-choice{display:block;flex:1;min-width:0;width:100%;min-height:40px;padding:8px 10px;text-align:left;background:transparent;color:inherit;border:0;border-radius:5px;font:inherit;overflow-wrap:anywhere}
+.person-choice-row:hover,.person-choice-row:focus-within,.person-field .person-choice:hover,.person-choice[aria-pressed=true]{background:var(--wash)}
+.person-field .person-remove{flex:0 0 30px;width:30px;min-height:30px;margin:0 4px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:20px;opacity:0}
+.person-choice-row:hover .person-remove,.person-choice-row:focus-within .person-remove{opacity:1}
+.person-field .person-remove:hover{color:var(--red);background:var(--wash)}
+.person-field .person-new{border-top:1px solid var(--line);color:var(--green)}
+.person-field button:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+@media(hover:none),(pointer:coarse){.person-field .person-remove{opacity:1;min-height:40px;flex-basis:40px}}
