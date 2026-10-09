@@ -76,8 +76,9 @@ export function AuthGate({ children, access = "main" }: { children: ReactNode; a
       if(!active())return;
       if (!snapshot.exists()) throw new Error("No PlantFlow access profile exists for this account.");
       const data = snapshot.data() as Omit<UserProfile, "uid">;
-      if (!data.enabled) throw new Error("This PlantFlow account has been disabled.");
+      if (!data.enabled || data.removed) throw new Error("This PlantFlow account has been disabled.");
       if (!["super_admin", "admin", "standard", "job_creator", "manager", "viewer"].includes(data.role)) throw new Error("This account does not have a valid PlantFlow role.");
+      if (["manager","viewer"].includes(data.role)) throw new Error("This legacy access level has been retired. Ask a Super Admin to assign a current portal role.");
       const effectiveRole = nextUser.uid === "TOXwE0xXDlgoL4YqBbrTOGjxCyk1" ? "super_admin" : data.role;
       if (access === "main" && !["super_admin", "admin"].includes(effectiveRole)) throw new Error("This account is limited to the Production Floor Portal.");
       if (access === "production" && !["super_admin", "admin", "standard"].includes(effectiveRole)) throw new Error("This account does not have Production Floor Portal access.");

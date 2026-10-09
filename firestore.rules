@@ -13,15 +13,16 @@ service cloud.firestore {
     function hasRole(roles) {
       return signedIn()
         && userProfile().data.enabled == true
+        && userProfile().data.get('removed', false) == false
         && userProfile().data.role in roles;
     }
 
     function canView() {
-      return hasRole(['super_admin', 'admin', 'standard', 'manager', 'viewer']);
+      return hasRole(['super_admin', 'admin', 'standard']);
     }
 
     function canManageProduction() {
-      return hasRole(['super_admin', 'admin', 'standard', 'manager']);
+      return hasRole(['super_admin', 'admin', 'standard']);
     }
 
     function isJobCreator() {
@@ -29,7 +30,8 @@ service cloud.firestore {
     }
 
     function canCreateJob(data) {
-      return canManageProduction() || (isJobCreator()
+      return (canManageProduction() && (!hasRole(['standard'])
+        || !data.keys().hasAny(['billingState', 'billingNote', 'billingApprovedAt', 'billingClearedAt']))) || (isJobCreator()
         && data.createdBy == request.auth.uid
         && data.id is string && data.jobNumber is string
         && data.jobNumber.size() > 0
@@ -45,12 +47,17 @@ service cloud.firestore {
       return hasRole(['super_admin'])
         || (signedIn()
           && request.auth.uid == 'TOXwE0xXDlgoL4YqBbrTOGjxCyk1'
-          && userProfile().data.enabled == true);
+          && userProfile().data.enabled == true
+          && userProfile().data.get('removed', false) == false);
     }
 
     match /users/{userId} {
       allow read: if signedIn() && (request.auth.uid == userId || isSuperAdmin());
       allow create, update, delete: if isSuperAdmin();
+      allow update: if signedIn() && request.auth.uid == userId
+        && resource.data.enabled == true && resource.data.get('removed', false) == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSignInAt'])
+        && request.resource.data.lastSignInAt == request.time;
     }
 
     match /configuration/{documentId} {
@@ -131,7 +138,8 @@ service cloud.firestore {
         && deletionCompleting(jobId);
       allow update: if canManageProduction()
         && notDeleted(jobId)
-        && (!hasRole(['standard']) || request.resource.data.dueDate == resource.data.dueDate);
+        && (!hasRole(['standard']) || (request.resource.data.dueDate == resource.data.dueDate
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['billingState', 'billingNote', 'billingApprovedAt', 'billingClearedAt'])));
     }
 
     // Immutable full snapshots. Deploy these rules before enabling the Archive UI.
@@ -214,9 +222,11 @@ service cloud.firestore {
         && (canManageProduction() || (isJobCreator()
           && !exists(/databases/$(database)/documents/jobs/$(jobId))
           && getAfter(/databases/$(database)/documents/jobs/$(jobId)).data.createdBy == request.auth.uid
-          && getAfter(/databases/$(database)/documents/jobs/$(jobId)).data.jobNumber == request.resource.data.jobNumber));
+          && getAfter(/databases/$(database)/documents/jobs/$(jobId)).data.jobNumber == request.resource.data.jobNumber))
+        && (!hasRole(['standard']) || request.resource.data.dueDate == getAfter(/databases/$(database)/documents/jobs/$(jobId)).data.dueDate);
       allow delete: if canManageProduction() && (notDeleted(jobId) || (canManageAdministration() && deletionCompleting(jobId)));
-      allow update: if canManageProduction() && notDeleted(jobId);
+      allow update: if canManageProduction() && notDeleted(jobId)
+        && (!hasRole(['standard']) || request.resource.data.dueDate == getAfter(/databases/$(database)/documents/jobs/$(jobId)).data.dueDate);
     }
   }
 }

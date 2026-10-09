@@ -3,6 +3,7 @@ import {doc,setDoc,getDoc,getDocs,collection,writeBatch,updateDoc,deleteDoc} fro
 import {readFileSync} from 'node:fs';
 const env=await initializeTestEnvironment({projectId:'demo-intake-access',firestore:{host:'127.0.0.1',port:8187,rules:readFileSync('firestore.rules','utf8')}});
 try {
+  await env.clearFirestore();
   await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
     for(const [uid,role,enabled] of [['creator','job_creator',true],['disabled','job_creator',false],['viewer','viewer',true]])await setDoc(doc(db,'users',uid),{role,enabled});
