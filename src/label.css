@@ -2506,16 +2506,31 @@ tr.deadline-overdue .status-pill.green {
 
 .status-label-grid {
   display: grid;
-  grid-template-columns: repeat(2,1fr);
-  gap: 14px;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 24px 36px;
 }
 
 .status-label {
-  padding: 16px;
+  padding: 12px 18px;
   border: 1px solid #cad5d0;
   border-top: 7px solid;
   border-radius: 8px;
   break-inside: avoid;
+}
+
+/* Keep each command centered with generous white quiet zones for scanners. */
+.status-label .barcode-wrap {
+  width: 2.65in;
+  max-width: 100%;
+  margin: 0 auto 6px;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.status-label .barcode-wrap svg {
+  display: block;
+  width: 100%;
+  height: 48px;
 }
 
 .status-label > strong {
@@ -3527,10 +3542,17 @@ tr.deadline-overdue .status-pill.green {
 
   .printing-statuses .status-print-sheet {
     width: 7.5in !important;
-    margin: 0 !important;
-    padding: .2in !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: .1in !important;
     border: 0 !important;
   }
+
+  .printing-statuses .status-print-sheet > img { width: 1.8in; }
+  .printing-statuses .status-print-sheet > h1 { margin: 10px 0 5px; font-size: 20px; }
+  .printing-statuses .status-print-sheet > p { margin: 0 0 18px; }
+  .printing-statuses .status-label-grid { gap: .25in .375in; }
+  .printing-statuses .status-label > strong { font-size: 17px; margin-bottom: 8px; }
 
   .printing-statuses .status-label {
     page-break-inside: avoid !important;
@@ -5596,3 +5618,6 @@ tr.deadline-overdue .status-pill.green {
   font-family: inherit; font-size: 14px; font-weight: 600; border-radius: 10px;
 }
 .calendar-field .calendar-trigger > span { font-size: 14px; }
+.admin-save-lock { display: contents; }
+.admin-save-feedback { flex-basis: 100%; margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: inherit; }
+.department-admin-actions, .status-admin-actions { flex-wrap: wrap; }

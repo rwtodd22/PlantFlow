@@ -871,10 +871,16 @@ export default function Home() {
 
   // Archival is explicit. The legacy automatic deletion setting is not executed.
 
-  const saveStatuses = (nextStatuses: StatusDefinition[]) => {
+  const saveAdminChanges = async (next: typeof state) => {
+    if (!hasAdministrationAccess || cloudStatus !== "ready") throw new Error("Connect to Firebase before saving. Your edits have not been confirmed.");
+    await cloudDataService.saveChanges(state, withCompletionMetadata(state,next), user.uid, rememberSharedNames);
+    // The live subscription supplies the confirmed state; do not replace newer
+    // job updates with the state captured when the save button was clicked.
+  };
+
+  const saveStatuses = async (nextStatuses: StatusDefinition[]) => {
     const renameMap = new Map(statuses.map(oldStatus => [oldStatus.name,nextStatuses.find(item=>item.id===oldStatus.id)?.name||oldStatus.name]));
-    persist({...state,statuses:nextStatuses,jobs:state.jobs.map(job=>({...job,status:renameMap.get(job.status)||job.status,parts:job.parts?.map(part=>({...part,status:renameMap.get(part.status)||part.status}))}))});
-    setNotice({kind:"success",title:"Statuses updated",detail:"Status names, commands, colors, and availability were saved."});
+    await saveAdminChanges({...state,statuses:nextStatuses,jobs:state.jobs.map(job=>({...job,status:renameMap.get(job.status)||job.status,parts:job.parts?.map(part=>({...part,status:renameMap.get(part.status)||part.status}))}))});
   };
 
   const saveJobOverride = (original: Job, updated: Job, minutesHere: number, allowScheduleOverride=false) => {
@@ -1083,7 +1089,7 @@ export default function Home() {
 
       {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>The newest 300 movements load instantly. Older records remain in Firestore and can be loaded in pages.</p></div><span className="count-pill">{historyScans.length} loaded</span></div><div className="history-list">{historyScans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.auditOnly?<>Manual edit · {scan.changedFields?.join(", ")}<small>Changed by {scan.actorName}</small></>:scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div>{historyHasMore&&<div className="history-load-more"><button type="button" className="secondary" disabled={historyLoading} onClick={()=>void loadOlderHistory()}>{historyLoading?"Loading older history…":"Load 250 older movements"}</button><small>Loading older pages does not affect live scanner performance.</small></div>}</section>}
 
-      {page === "admin" && hasAdministrationAccess && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<JobIntakeAdminCard/><ProductionPortalAdminCard/><ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} jobs={state.jobs} settings={state.settings} cloudStatus={cloudStatus} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} />{isSuperAdmin&&<DataMaintenancePanel jobCount={state.jobs.length} onClearAllJobs={clearAllJobData}/>}</>}
+      {page === "admin" && hasAdministrationAccess && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<JobIntakeAdminCard/><ProductionPortalAdminCard/><ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} jobs={state.jobs} settings={state.settings} cloudStatus={cloudStatus} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>saveAdminChanges({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} />{isSuperAdmin&&<DataMaintenancePanel jobCount={state.jobs.length} onClearAllJobs={clearAllJobData}/>}</>}
       {page === "billing" && hasAdministrationAccess && <><ReadyForBilling departments={departments} onReturn={returnToProduction} canArchive={rememberSharedNames} standalone jobs={state.jobs} statuses={statuses} onApprove={approveForBilling} onClear={archiveFromBilling} archiveBusy={archiveBusy} onUpdate={updateBillingDetails}/>{rememberSharedNames?<ArchivePanel revision={archiveRevision} loadPage={loadArchivePage} loadHistory={loadArchiveEvents} resumeHistory={resumeArchiveHistory}/>:<p>Archive access requires an Admin or Super Admin.</p>}</>}
     </main>
     {printJob && <OverlayPortal target={jobsFullscreen?activeJobsRef.current:null}><div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE LABEL</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details">{printJob.customer&&<b>{printJob.customer}</b>}{printJob.description&&<span>{printJob.description}</span>}<span>Due {formatDate(printJob.dueDate)}</span></div></div>{completedCreation&&<p className="creation-complete">✓ Job {completedCreation.jobNumber} added to Active Jobs. Labels can be reprinted there later.</p>}<div className="reprint-actions">{completedCreation&&<button className="secondary" onClick={finishCreation}>Done</button>}<button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div></OverlayPortal>}
@@ -1451,7 +1457,28 @@ function DataMaintenancePanel({jobCount,onClearAllJobs}:{jobCount:number;onClear
   </section>;
 }
 
-function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,onSave,onSaveStatuses,onPrintStatuses}:{departments:Department[];statuses:StatusDefinition[];jobs:Job[];settings:AppSettings;cloudStatus:"loading"|"ready"|"offline";onChangeSettings:(settings:AppSettings)=>void;onSave:(d:Department[])=>void;onSaveStatuses:(s:StatusDefinition[])=>void;onPrintStatuses:(s:StatusDefinition[])=>void}) {
+function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,onSave,onSaveStatuses,onPrintStatuses}:{departments:Department[];statuses:StatusDefinition[];jobs:Job[];settings:AppSettings;cloudStatus:"loading"|"ready"|"offline";onChangeSettings:(settings:AppSettings)=>void;onSave:(d:Department[])=>Promise<void>;onSaveStatuses:(s:StatusDefinition[])=>Promise<void>;onPrintStatuses:(s:StatusDefinition[])=>void}) {
+  const [saving,setSaving]=useState<"departments"|"statuses"|null>(null);
+  const savingRef=useRef(false);
+  const [saveFeedback,setSaveFeedback]=useState<Partial<Record<"departments"|"statuses",{text:string;error?:boolean}>>>({});
+  const saveSection=async(section:"departments"|"statuses")=>{
+    if(savingRef.current)return;
+    savingRef.current=true;
+    setSaving(section);
+    setSaveFeedback(current=>({...current,[section]:{text:"Saving to Firebase…"}}));
+    const timer=window.setTimeout(()=>setSaveFeedback(current=>({...current,[section]:{text:"Still waiting for Firebase confirmation. Please keep this page open."}})),10000);
+    try{
+      await (section==="departments"?onSave(draft):onSaveStatuses(statusDraft));
+      setSaveFeedback(current=>({...current,[section]:{text:section==="departments"?"✓ Departments saved.":"✓ Statuses saved."}}));
+    }catch{
+      setSaveFeedback(current=>({...current,[section]:{text:"Save could not be confirmed. Your edits are still here. Check your connection and permissions, then try again.",error:true}}));
+    }finally{
+      window.clearTimeout(timer);
+      savingRef.current=false;
+      setSaving(null);
+    }
+  };
+  const feedback=(section:"departments"|"statuses")=>saveFeedback[section]&&<p className="admin-save-feedback" role={saveFeedback[section]?.error?"alert":"status"}>{saveFeedback[section]?.text}</p>;
   const [draft,setDraft]=useState(departments);
   const [statusDraft,setStatusDraft]=useState(statuses);
   const [editorMessage,setEditorMessage]=useState("");
@@ -1460,6 +1487,7 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
   const update=(id:string,field:keyof Department,value:string|boolean)=>setDraft(draft.map(d=>d.id===id?{...d,[field]:value}:d));
   const updateStatus=(id:string,field:keyof StatusDefinition,value:string|boolean)=>setStatusDraft(current=>current.map(status=>status.id===id?{...status,[field]:value}:status));
   const addDepartment=()=>{
+    setSaveFeedback({});
     const nextNumber=draft.length+1;
     setDraft(current=>[...current,{id:makeId(),name:"New Department",prefix:`DEPT${nextNumber}`,enabled:true,order:Math.max(0,...current.map(item=>item.order))+1}]);
     setEditorMessage("New department added. Update its name and scanner prefix, then save departments.");
@@ -1468,14 +1496,16 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
     const assigned=jobs.some(job=>job.currentDepartmentId===department.id||job.parts?.some(part=>part.currentDepartmentId===department.id));
     if(assigned){setEditorMessage(`${department.name} is currently assigned to one or more jobs. Move those jobs first, or disable the department instead.`);return;}
     if(!window.confirm(`Delete ${department.name} from the department list? Existing scan-history text will be preserved.`))return;
+    setSaveFeedback({});
     setDraft(current=>current.filter(item=>item.id!==department.id));
     setEditorMessage(`${department.name} removed from the draft. Click Save departments to confirm.`);
   };
-  const addStatus=()=>setStatusDraft(current=>[...current,{id:makeId(),name:"New Status",code:`STATUS_${current.length+1}`,enabled:true,order:current.length+1,color:"#64748b",closesJob:false}]);
+  const addStatus=()=>{setSaveFeedback({});setStatusDraft(current=>[...current,{id:makeId(),name:"New Status",code:`STATUS_${current.length+1}`,enabled:true,order:current.length+1,color:"#64748b",closesJob:false}]);};
   const deleteStatus=(status:StatusDefinition)=>{
     const assigned=jobs.some(job=>job.status===status.name||job.parts?.some(part=>part.status===status.name));
     if(assigned){setEditorMessage(`${status.name} is currently assigned to one or more jobs. Change those jobs first, or disable the status instead.`);return;}
     if(!window.confirm(`Delete the ${status.name} status and its barcode command?`))return;
+    setSaveFeedback({});
     setStatusDraft(current=>current.filter(item=>item.id!==status.id));
     setEditorMessage(`${status.name} removed from the draft. Click Save statuses to confirm.`);
   };
@@ -1489,11 +1519,11 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
     {label:"Job records",value:String(jobs.length),tone:"neutral"},
     {label:"Latest job activity",value:latestActivity?timeAgo(latestActivity):"No activity yet",tone:"neutral"},
   ];
-  return <section className="admin-workspace">
+  return <section className="admin-workspace" onChangeCapture={()=>setSaveFeedback({})}><fieldset className="admin-save-lock" disabled={saving!==null}>
     {editorMessage&&<div className="admin-editor-message" role="status"><span>{editorMessage}</span><button type="button" aria-label="Dismiss message" onClick={()=>setEditorMessage("")}>×</button></div>}
     <div className="admin-grid">
       <div className="panel">
-        <div className="panel-head"><div><h2>Departments & scanner prefixes</h2><p>Add, rename, disable, or remove departments as your workflow develops.</p></div><div className="department-admin-actions"><button className="secondary" onClick={addDepartment}>+ Add department</button><button className="primary small" onClick={()=>onSave(draft)}>Save departments</button></div></div>
+        <div className="panel-head"><div><h2>Departments & scanner prefixes</h2><p>Add, rename, disable, or remove departments as your workflow develops.</p></div><div className="department-admin-actions"><button className="secondary" onClick={addDepartment}>+ Add department</button><button className="primary small" onClick={()=>void saveSection("departments")}>{saving==="departments"?"Saving…":"Save departments"}</button>{feedback("departments")}</div></div>
         <div className="department-editor">{[...draft].sort((a,b)=>a.order-b.order).map(d=><div key={d.id}><span className="drag">⠿</span><input aria-label="Department name" value={d.name} onChange={e=>update(d.id,"name",e.target.value)}/><label className="prefix-input"><span>Prefix</span><input aria-label={`Scanner prefix for ${d.name}`} value={d.prefix} onChange={e=>update(d.id,"prefix",e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g,""))}/><b>|</b></label><label className="switch" aria-label={`${d.enabled?"Disable":"Enable"} ${d.name}`}><input type="checkbox" checked={d.enabled} onChange={e=>update(d.id,"enabled",e.target.checked)}/><span/></label><button type="button" className="editor-delete-button" onClick={()=>deleteDepartment(d)}>Delete</button></div>)}</div>
       </div>
       <div className="admin-side-stack">
@@ -1501,8 +1531,8 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
         <aside className="panel system-health-card"><div className="system-health-head"><div><p className="eyebrow">SYSTEM HEALTH</p><h2>PlantFlow status</h2></div><span className={`health-summary ${cloudStatus==="ready"?"good":"warning"}`}><i/>{cloudStatus==="ready"?"All systems ready":"Attention needed"}</span></div><div className="system-health-grid">{systemHealthItems.map(item=><div className="system-health-item" key={item.label}><span>{item.label}</span><b className={item.tone}>{item.value}</b></div>)}</div><p className="system-health-footnote">Use this card as a quick first check if a scan or job update does not appear as expected.</p></aside>
       </div>
     </div>
-    <div className="panel status-admin"><div className="panel-head"><div><h2>Statuses & laminated barcode commands</h2><p>Add, edit, disable, or remove status commands. One barcode sheet can be posted at every station.</p></div><div className="status-admin-actions"><button className="secondary" onClick={addStatus}>+ Add status</button><button className="secondary" onClick={()=>onPrintStatuses(statusDraft)}>▥ Print barcode sheet</button><button className="primary" onClick={()=>onSaveStatuses(statusDraft)}>Save statuses</button></div></div><div className="status-editor-head"><span>Color</span><span>Status name</span><span>Barcode command</span><span>Closes job</span><span>Enabled</span><span>Print</span><span>Remove</span></div><div className="status-editor">{[...statusDraft].sort((a,b)=>a.order-b.order).map(status=><div key={status.id}><input type="color" value={status.color} onChange={e=>updateStatus(status.id,"color",e.target.value)}/><input value={status.name} onChange={e=>updateStatus(status.id,"name",e.target.value)}/><label className="status-code"><span>STATUS:</span><input value={status.code} onChange={e=>updateStatus(status.id,"code",e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,""))}/></label><label className="check-label"><input type="checkbox" checked={status.closesJob} onChange={e=>updateStatus(status.id,"closesJob",e.target.checked)}/> Yes</label><label className="switch"><input type="checkbox" checked={status.enabled} onChange={e=>updateStatus(status.id,"enabled",e.target.checked)}/><span/></label><button className="barcode-action" onClick={()=>onPrintStatuses([status])}>▥ Print</button><button type="button" className="editor-delete-button" onClick={()=>deleteStatus(status)}>Delete</button></div>)}</div></div>
-  </section>
+    <div className="panel status-admin"><div className="panel-head"><div><h2>Statuses & laminated barcode commands</h2><p>Add, edit, disable, or remove status commands. One barcode sheet can be posted at every station.</p></div><div className="status-admin-actions"><button className="secondary" onClick={addStatus}>+ Add status</button><button className="secondary" onClick={()=>onPrintStatuses(statusDraft)}>▥ Print barcode sheet</button><button className="primary" onClick={()=>void saveSection("statuses")}>{saving==="statuses"?"Saving…":"Save statuses"}</button>{feedback("statuses")}</div></div><div className="status-editor-head"><span>Color</span><span>Status name</span><span>Barcode command</span><span>Closes job</span><span>Enabled</span><span>Print</span><span>Remove</span></div><div className="status-editor">{[...statusDraft].sort((a,b)=>a.order-b.order).map(status=><div key={status.id}><input type="color" value={status.color} onChange={e=>updateStatus(status.id,"color",e.target.value)}/><input value={status.name} onChange={e=>updateStatus(status.id,"name",e.target.value)}/><label className="status-code"><span>STATUS:</span><input value={status.code} onChange={e=>updateStatus(status.id,"code",e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,""))}/></label><label className="check-label"><input type="checkbox" checked={status.closesJob} onChange={e=>updateStatus(status.id,"closesJob",e.target.checked)}/> Yes</label><label className="switch"><input type="checkbox" checked={status.enabled} onChange={e=>updateStatus(status.id,"enabled",e.target.checked)}/><span/></label><button className="barcode-action" onClick={()=>onPrintStatuses([status])}>▥ Print</button><button type="button" className="editor-delete-button" onClick={()=>deleteStatus(status)}>Delete</button></div>)}</div></div>
+  </fieldset></section>
 }
 import {CalendarDatePicker} from "./CalendarDatePicker";
 import {durableScanQueue} from "../lib/durableScanQueue";
