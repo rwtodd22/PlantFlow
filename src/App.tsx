@@ -530,6 +530,7 @@ export default function Home() {
   }, []);
   const persist = useCallback((next: typeof state) => {
     const normalized = withCompletionMetadata(state, next);
+    if(productionFloorPortal)normalized.scans=[...portalAudit(state,normalized,user.uid,profile.displayName||"Employee",new Date().toISOString(),makeId),...normalized.scans];
     setState(normalized);
     dataService.save(normalized);
     if (canEdit && cloudReady.current) {
@@ -542,7 +543,7 @@ export default function Home() {
     } else if (canEdit) {
       pendingCloudState.current = normalized;
     }
-  }, [canEdit, state, user.uid, rememberSharedNames]);
+  }, [canEdit, state, user.uid, rememberSharedNames, productionFloorPortal, profile.displayName]);
 
   const historyScans = useMemo(() => {
     const combined = new Map<string, ScanEvent>();
@@ -1075,7 +1076,7 @@ export default function Home() {
         </section>)}
       </section>}
 
-      {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>The newest 300 movements load instantly. Older records remain in Firestore and can be loaded in pages.</p></div><span className="count-pill">{historyScans.length} loaded</span></div><div className="history-list">{historyScans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div>{historyHasMore&&<div className="history-load-more"><button type="button" className="secondary" disabled={historyLoading} onClick={()=>void loadOlderHistory()}>{historyLoading?"Loading older history…":"Load 250 older movements"}</button><small>Loading older pages does not affect live scanner performance.</small></div>}</section>}
+      {page === "history" && <section className="panel"><div className="panel-head"><div><h2>Permanent movement history</h2><p>The newest 300 movements load instantly. Older records remain in Firestore and can be loaded in pages.</p></div><span className="count-pill">{historyScans.length} loaded</span></div><div className="history-list">{historyScans.map(scan=>{const job=state.jobs.find(item=>item.jobNumber===scan.jobNumber||item.parts?.some(part=>part.code===scan.jobNumber));const part=job?.parts?.find(item=>item.code===scan.jobNumber);return <div className="history-row" key={scan.id}><div className="timeline-dot"/><time>{new Date(scan.timestamp).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><strong>Job {scan.jobNumber}</strong><span>{scan.partName&&<>{scan.partName} · </>}{scan.auditOnly?<>Manual edit · {scan.changedFields?.join(", ")}<small>Changed by {scan.actorName}</small></>:scan.statusName?<>changed to <b>{scan.statusName}</b> in {scan.departmentName}</>:<>moved to <b>{scan.departmentName}</b></>}</span><em className={scan.type==="Normal"?"normal":"exception"}>{scan.type}</em>{job&&(part?<button className="barcode-action" onClick={()=>setPrintPart({job,part})}>▥ Reprint</button>:<button className="barcode-action" onClick={()=>setPrintJob(job)}>▥ Reprint</button>)}</div>})}</div>{historyHasMore&&<div className="history-load-more"><button type="button" className="secondary" disabled={historyLoading} onClick={()=>void loadOlderHistory()}>{historyLoading?"Loading older history…":"Load 250 older movements"}</button><small>Loading older pages does not affect live scanner performance.</small></div>}</section>}
 
       {page === "admin" && hasAdministrationAccess && <><ReportsBackupPanel onReport={setManagementReport} onBackup={()=>downloadExcelBackup(state)}/>{isSuperAdmin&&<UserAccessPanel currentUid={user.uid}/>}<JobIntakeAdminCard/><ProductionPortalAdminCard/><ViewerPortalAdminCard/><Admin departments={departments} statuses={statuses} jobs={state.jobs} settings={state.settings} cloudStatus={cloudStatus} onChangeSettings={(settings)=>persist({...state,settings})} onSave={(next)=>persist({...state,departments:next})} onSaveStatuses={saveStatuses} onPrintStatuses={setStatusPrint} /><DataMaintenancePanel jobCount={state.jobs.length} onClearAllJobs={clearAllJobData}/></>}
       {page === "billing" && hasAdministrationAccess && <><ReadyForBilling departments={departments} onReturn={returnToProduction} canArchive={rememberSharedNames} standalone jobs={state.jobs} statuses={statuses} onApprove={approveForBilling} onClear={archiveFromBilling} archiveBusy={archiveBusy} onUpdate={updateBillingDetails}/>{rememberSharedNames?<ArchivePanel revision={archiveRevision} loadPage={loadArchivePage} loadHistory={loadArchiveEvents} resumeHistory={resumeArchiveHistory}/>:<p>Archive access requires an Admin or Super Admin.</p>}</>}
@@ -1495,3 +1496,4 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
 }
 import {CalendarDatePicker} from "./CalendarDatePicker";
 import {durableScanQueue} from "../lib/durableScanQueue";
+import {portalAudit} from "../lib/portalAudit";

@@ -1,0 +1,11 @@
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const js=ts.transpileModule(readFileSync('lib/portalAudit.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText;
+const {portalAudit}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const before={jobs:[{id:'j',jobNumber:'123',notes:'',status:'Ready',currentDepartmentId:''}],departments:[]};
+assert.equal(portalAudit(before,before,'u','Employee','now',()=> 'e').length,0);
+const after={...before,jobs:[{...before.jobs[0],notes:'Updated'}]};
+const [event]=portalAudit(before,after,'u','Employee','now',()=> 'e');
+assert.equal(event.actorUid,'u');assert.equal(event.actorName,'Employee');assert.equal(event.auditOnly,true);assert.deepEqual(event.changedFields,['Notes']);assert.equal(event.jobId,'j');
+console.log('PASS: no-op suppression, employee attribution, field summary, stable job identity, non-movement marker.');

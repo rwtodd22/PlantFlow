@@ -4,6 +4,7 @@ import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOu
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db, firebaseConfig } from "./firebase";
 import { productionEmailForName } from "./auth";
+import {getFunctions,httpsCallable} from "firebase/functions";
 
 type AccessUser = {
   uid: string;
@@ -47,6 +48,22 @@ export function UserAccessPanel({currentUid}:{currentUid:string}) {
   const [newRole,setNewRole]=useState<AccessRole>("standard");
   const [busy,setBusy]=useState(false);
   const [feedback,setFeedback]=useState<Feedback>(null);
+  const [resetTarget,setResetTarget]=useState<AccessUser|null>(null);
+  const submitPasscode=async(event:FormEvent<HTMLFormElement>)=>{
+    event.preventDefault();
+    if(!resetTarget||busy)return;
+    const form=event.currentTarget, values=new FormData(form);
+    const passcode=String(values.get("passcode")||"");
+    if(passcode!==String(values.get("confirmation")||"")){setFeedback({kind:"error",message:"The passcodes do not match."});return;}
+    setBusy(true);setFeedback(null);
+    try{
+      await httpsCallable(getFunctions(auth.app,"us-central1"),"resetProductionPasscode")({uid:resetTarget.uid,passcode});
+      form.reset();setResetTarget(null);
+      setFeedback({kind:"success",message:`Passcode reset for ${resetTarget.displayName}. Give the new passcode to the employee securely. Their account and production history are unchanged.`});
+    }catch(error){
+      setFeedback({kind:"error",message:"Passcode reset could not be confirmed. Check your connection and Super Admin access, and ensure the reset function is deployed. You can retry assigning the same passcode."});
+    }finally{setBusy(false);}
+  };
 
   useEffect(()=>onSnapshot(collection(db,"users"),snapshot=>{
     setUsers(snapshot.docs.map(item=>({uid:item.id,...item.data()} as AccessUser)).sort((a,b)=>(a.removed===b.removed?0:a.removed?1:-1)||a.displayName.localeCompare(b.displayName)));
@@ -111,12 +128,20 @@ export function UserAccessPanel({currentUid}:{currentUid:string}) {
   };
 
   return <section className="panel user-access-panel">
+    {resetTarget&&<form className="user-invite-card" onSubmit={submitPasscode} aria-label="Reset employee passcode">
+      <h3>Reset passcode for {resetTarget.displayName}</h3>
+      <p>The old passcode will stop working. This does not change the employee’s name, role, or job history.</p>
+      <label><span>New assigned passcode</span><input type="password" name="passcode" autoComplete="new-password" required minLength={8} maxLength={128} disabled={busy}/></label>
+      <label><span>Confirm passcode</span><input type="password" name="confirmation" autoComplete="new-password" required minLength={8} maxLength={128} disabled={busy}/></label>
+      <button className="primary" disabled={busy}>{busy?"Resetting…":"Reset passcode"}</button>
+      <button type="button" className="secondary" disabled={busy} onClick={()=>setResetTarget(null)}>Cancel</button>
+    </form>}
     <div className="user-access-heading"><div><p className="eyebrow">SECURE USER MANAGEMENT</p><h2>User access</h2><p>Manage email-based administrators and employee-name access to the Production Floor Portal. Only Super Admins can see or change this area.</p></div><span className="user-count"><b>{activeCount}</b> active {activeCount===1?"user":"users"}</span></div>
     <div className="user-access-layout">
       <form className="user-invite-card" onSubmit={createUser}>
         <label><span>Name</span><input name="displayName" required placeholder="Employee name"/></label>
         <label><span>Access level</span><select name="role" value={newRole} onChange={event=>setNewRole(event.target.value as AccessRole)}><option value="standard">Production Floor — portal only</option><option value="job_creator">Job Creator — intake portal only</option><option value="admin">Admin — full PlantFlow access</option><option value="super_admin">Super Admin — complete access</option></select></label>
-        {newRole==="standard"?<><label><span>Assigned passcode</span><input name="password" type="password" required minLength={6} autoComplete="new-password" placeholder="At least 6 characters"/><small>This fixed passcode is assigned by a Super Admin and is used with the employee name.</small></label><p className="invite-explainer">This account can open only the Production Floor Portal. No email address is required, and no password-reset link is available.</p></>:<><div className="access-mode-tabs"><button type="button" className={mode==="invite"?"active":""} onClick={()=>setMode("invite")}>Invite by email</button><button type="button" className={mode==="password"?"active":""} onClick={()=>setMode("password")}>Assign password</button></div><label><span>Email address</span><input name="email" type="email" required placeholder="name@worthhiggins.com"/></label>{mode==="password"&&<label><span>Temporary password / portal passcode</span><input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters"/><small>This password opens both the main PlantFlow workspace and the Production Floor Portal when used with the administrator’s email.</small></label>}{mode==="invite"&&<p className="invite-explainer">Firebase will email a secure link so the administrator can choose a password. That password will also open the Production Floor Portal when used with their admin email.</p>}</>}
+        {newRole==="standard"?<><label><span>Assigned passcode</span><input name="password" type="password" required minLength={6} autoComplete="new-password" placeholder="At least 6 characters"/><small>This fixed passcode is assigned by a Super Admin and is used with the employee name.</small></label><p className="invite-explainer">This account can open only the Production Floor Portal. No email address is required. A Super Admin can assign a replacement using Reset passcode.</p></>:<><div className="access-mode-tabs"><button type="button" className={mode==="invite"?"active":""} onClick={()=>setMode("invite")}>Invite by email</button><button type="button" className={mode==="password"?"active":""} onClick={()=>setMode("password")}>Assign password</button></div><label><span>Email address</span><input name="email" type="email" required placeholder="name@worthhiggins.com"/></label>{mode==="password"&&<label><span>Temporary password / portal passcode</span><input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters"/><small>This password opens both the main PlantFlow workspace and the Production Floor Portal when used with the administrator’s email.</small></label>}{mode==="invite"&&<p className="invite-explainer">Firebase will email a secure link so the administrator can choose a password. That password will also open the Production Floor Portal when used with their admin email.</p>}</>}
         <button className="primary" disabled={busy}>{busy?"Creating account…":newRole==="standard"?"Create production account":mode==="invite"?"Create account & send invite":"Create account"}</button>
       </form>
       <div className="user-directory">
@@ -125,7 +150,7 @@ export function UserAccessPanel({currentUid}:{currentUid:string}) {
         {loading?<div className="user-empty">Loading users…</div>:users.length===0?<div className="user-empty">No PlantFlow users have been added.</div>:<div className="user-list">{users.map(item=><article className={`user-row ${item.removed?"removed":""}`} key={item.uid}>
           <div className="user-avatar" aria-hidden="true">{(item.displayName||item.email).slice(0,1).toUpperCase()}</div>
           <div className="user-identity"><div><b>{item.displayName||"PlantFlow user"}</b>{item.uid===currentUid&&<em>You</em>}<span className={`role-state ${item.uid===ownerUid?"super_admin":item.role}`}>{roleLabels[item.uid===ownerUid?"super_admin":item.role]||"Production Floor"}</span>{item.removed?<span className="access-state removed">Removed</span>:item.enabled?<span className="access-state active">Active</span>:<span className="access-state disabled">Disabled</span>}</div><small>{item.role==="standard"?`Employee sign-in: ${item.loginName||item.displayName}`:item.email}</small>{item.role==="job_creator"&&<small>Portal access: Job Creation Portal only</small>}{item.role!=="standard"&&item.role!=="job_creator"&&<small>Production portal: use admin email + PlantFlow password</small>}<small>Last sign-in: {dateValue(item.lastSignInAt)}</small></div>
-          <div className="user-actions">{item.uid===ownerUid?<span className="locked-role-control" title="The primary owner always remains a Super Admin">Super Admin</span>:item.role==="standard"?<span className="locked-role-control" title="Production Floor accounts use employee-name sign-in">Production Floor</span>:<select aria-label={`Access level for ${item.displayName}`} value={item.role} disabled={item.removed} onChange={event=>changeRole(item,event.target.value as AccessRole)}><option value="job_creator">Job Creator</option><option value="admin">Admin</option><option value="super_admin">Super Admin</option></select>}{item.role!=="standard"&&<button type="button" onClick={()=>resetPassword(item)}>Send password link</button>}{item.enabled&&!item.removed?<button type="button" disabled={item.uid===currentUid} onClick={()=>changeAccess(item,"disable")}>Disable</button>:<button type="button" onClick={()=>changeAccess(item,"enable")}>{item.removed?"Restore access":"Enable"}</button>}<button type="button" className="remove-user" disabled={item.uid===currentUid||item.removed} onClick={()=>changeAccess(item,"remove")}>Remove access</button></div>
+          <div className="user-actions">{item.uid===ownerUid?<span className="locked-role-control" title="The primary owner always remains a Super Admin">Super Admin</span>:item.role==="standard"?<span className="locked-role-control" title="Production Floor accounts use employee-name sign-in">Production Floor</span>:<select aria-label={`Access level for ${item.displayName}`} value={item.role} disabled={item.removed} onChange={event=>changeRole(item,event.target.value as AccessRole)}><option value="job_creator">Job Creator</option><option value="admin">Admin</option><option value="super_admin">Super Admin</option></select>}{item.role==="standard"?<button type="button" disabled={!item.enabled||item.removed||busy} onClick={()=>{setResetTarget(item);setFeedback(null);}}>Reset passcode</button>:<button type="button" onClick={()=>resetPassword(item)}>Send password link</button>}{item.enabled&&!item.removed?<button type="button" disabled={item.uid===currentUid} onClick={()=>changeAccess(item,"disable")}>Disable</button>:<button type="button" onClick={()=>changeAccess(item,"enable")}>{item.removed?"Restore access":"Enable"}</button>}<button type="button" className="remove-user" disabled={item.uid===currentUid||item.removed} onClick={()=>changeAccess(item,"remove")}>Remove access</button></div>
         </article>)}</div>}
       </div>
     </div>

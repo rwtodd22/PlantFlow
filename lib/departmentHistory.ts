@@ -5,7 +5,7 @@ export type DepartmentHistory = { visits: DepartmentVisit[]; warnings: string[];
 /** Event timestamps are recorded observations, not a labor clock. Never use the editable job.updatedAt clock. */
 export function departmentHistory(job:Job,events:ScanEvent[],departments:Department[],statuses:StatusDefinition[],now=Date.now(),archived=false):DepartmentHistory {
   const warnings=new Set<string>();
-  const unique=[...new Map(events.map(event=>[event.id,event])).values()];
+  const unique=[...new Map(events.filter(event=>!event.auditOnly).map(event=>[event.id,event])).values()];
   const valid=unique.filter(event=>{if(Number.isFinite(Date.parse(event.timestamp)))return true;warnings.add("Some events have missing or invalid timestamps; those boundaries are unknown.");return false;});
   if(unique.some(event=>!event.jobId))warnings.add("Legacy events are linked by barcode, not a permanent job ID. Renamed or reused barcodes may leave missing or uncertain associations.");
   if(unique.some(event=>event.type==="Manual"&&!event.timestampBasis))warnings.add("Older manual-event timestamps may have been adjusted. They are shown as recorded, not verified physical arrival times.");
