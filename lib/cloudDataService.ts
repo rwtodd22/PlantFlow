@@ -100,6 +100,21 @@ function peopleUpdates(jobs: Job[]) {
 }
 
 export const cloudDataService = {
+  async savePerson(field: "customerRepresentative" | "projectManager", name: string) {
+    const cleaned = cleanPersonName(name);
+    if (!cleaned) return;
+    const key = field === "customerRepresentative" ? "customerRepresentatives" : "projectManagers";
+    const removedKey = field === "customerRepresentative" ? "removedCustomerRepresentatives" : "removedProjectManagers";
+    // Transaction preserves concurrent additions and only restores an explicitly added name.
+    await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(peopleDocument);
+      const removed = (snapshot.data()?.[removedKey] || []) as string[];
+      transaction.set(peopleDocument, {
+        [key]: arrayUnion(cleaned),
+        [removedKey]: removed.filter(item => cleanPersonName(item).toLocaleLowerCase() !== cleaned.toLocaleLowerCase()),
+      }, {merge:true});
+    });
+  },
   async removeSavedPerson(field: "customerRepresentative" | "projectManager", name: string) {
     const cleaned=cleanPersonName(name);
     if(!cleaned)return;
