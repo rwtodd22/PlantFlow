@@ -5626,10 +5626,12 @@ tr.deadline-overdue .status-pill.green {
 .admin-save-feedback { flex-basis: 100%; margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: inherit; }
 .department-admin-actions, .status-admin-actions { flex-wrap: wrap; }
 .viewer-table .viewer-reprint-button {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
   width: fit-content;
   min-height: 26px;
-  margin-top: 5px;
+  margin: 0 0 0 8px;
   padding: 3px 9px;
   border: 1px solid #cbdad3;
   border-radius: 5px;
@@ -5639,6 +5641,11 @@ tr.deadline-overdue .status-pill.green {
   font-weight: 600;
   line-height: 1.4;
   box-shadow: none;
+}
+.viewer-table td:has(.viewer-reprint-button) { white-space: nowrap; }
+.viewer-table td:nth-child(2):has(.viewer-reprint-button) > strong {
+  display: inline-block;
+  vertical-align: middle;
 }
 .viewer-table .viewer-reprint-button:hover { background: #e5eee9; border-color: #8ba99b; }
 .viewer-table .viewer-reprint-button:focus-visible { outline: 2px solid #32866c; outline-offset: 2px; }
