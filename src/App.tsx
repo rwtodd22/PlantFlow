@@ -366,34 +366,6 @@ function Code128({ value, displayValue = true }: { value: string; displayValue?:
   return <div className="barcode-wrap"><svg ref={barcodeRef} aria-label={`Code 128 barcode for ${value}`} /></div>;
 }
 
-function CalendarDatePicker({ value, onChange, min, name }: { value: string; onChange: (value: string) => void; min?: string; name?: string }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const selectedDate = new Date(`${value}T12:00:00`);
-  const [open, setOpen] = useState(false);
-  const [viewMonth, setViewMonth] = useState(() => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
-  useEffect(() => {
-    if (!open) return;
-    const closeOutside = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
-    document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
-  }, [open]);
-  const toValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-  const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
-  const gridStart = new Date(first);
-  gridStart.setDate(1 - first.getDay());
-  const days = Array.from({ length: 42 }, (_, index) => { const day = new Date(gridStart); day.setDate(gridStart.getDate()+index); return day; });
-  const moveMonth = (amount: number) => setViewMonth(current => new Date(current.getFullYear(), current.getMonth()+amount, 1));
-  const displayDate = selectedDate.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-  return <div className="calendar-field" ref={rootRef}>
-    {name&&<input type="hidden" name={name} value={value}/>} 
-    <button type="button" className={`calendar-trigger ${open?"open":""}`} aria-expanded={open} aria-haspopup="dialog" onClick={()=>{setViewMonth(new Date(selectedDate.getFullYear(),selectedDate.getMonth(),1));setOpen(current=>!current)}}><span>{displayDate}</span><b aria-hidden="true">▦</b></button>
-    {open&&<div className="calendar-popover" role="dialog" aria-label="Choose production due date">
-      <div className="calendar-head"><button type="button" aria-label="Previous month" onClick={()=>moveMonth(-1)}>‹</button><strong>{viewMonth.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</strong><button type="button" aria-label="Next month" onClick={()=>moveMonth(1)}>›</button></div>
-      <div className="calendar-weekdays">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=><span key={day}>{day}</span>)}</div>
-      <div className="calendar-days">{days.map(day=>{const dayValue=toValue(day);const outside=day.getMonth()!==viewMonth.getMonth();return <button type="button" key={dayValue} disabled={Boolean(min&&dayValue<min)} className={`${outside?"outside ":""}${dayValue===value?"selected ":""}${dayValue===localDateValue()?"today":""}`.trim()} onClick={()=>{onChange(dayValue);setOpen(false)}}>{day.getDate()}</button>})}</div>
-    </div>}
-  </div>;
-}
 
 function OverlayPortal({children,target}:{children:ReactNode;target:HTMLElement|null}) {
   return createPortal(children,target||document.body);
@@ -1507,3 +1479,4 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
     <div className="panel status-admin"><div className="panel-head"><div><h2>Statuses & laminated barcode commands</h2><p>Add, edit, disable, or remove status commands. One barcode sheet can be posted at every station.</p></div><div className="status-admin-actions"><button className="secondary" onClick={addStatus}>+ Add status</button><button className="secondary" onClick={()=>onPrintStatuses(statusDraft)}>▥ Print barcode sheet</button><button className="primary" onClick={()=>onSaveStatuses(statusDraft)}>Save statuses</button></div></div><div className="status-editor-head"><span>Color</span><span>Status name</span><span>Barcode command</span><span>Closes job</span><span>Enabled</span><span>Print</span><span>Remove</span></div><div className="status-editor">{[...statusDraft].sort((a,b)=>a.order-b.order).map(status=><div key={status.id}><input type="color" value={status.color} onChange={e=>updateStatus(status.id,"color",e.target.value)}/><input value={status.name} onChange={e=>updateStatus(status.id,"name",e.target.value)}/><label className="status-code"><span>STATUS:</span><input value={status.code} onChange={e=>updateStatus(status.id,"code",e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,""))}/></label><label className="check-label"><input type="checkbox" checked={status.closesJob} onChange={e=>updateStatus(status.id,"closesJob",e.target.checked)}/> Yes</label><label className="switch"><input type="checkbox" checked={status.enabled} onChange={e=>updateStatus(status.id,"enabled",e.target.checked)}/><span/></label><button className="barcode-action" onClick={()=>onPrintStatuses([status])}>▥ Print</button><button type="button" className="editor-delete-button" onClick={()=>deleteStatus(status)}>Delete</button></div>)}</div></div>
   </section>
 }
+import {CalendarDatePicker} from "./CalendarDatePicker";

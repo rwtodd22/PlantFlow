@@ -9,6 +9,27 @@
   background: #f7f9f8;
 }
 
+/* Shared spacious due-date calendar for administration and intake. */
+.calendar-field .calendar-popover{box-sizing:border-box;width:min(390px,calc(100vw - 48px));padding:18px;border-radius:18px;background:var(--paper,#fff);color:var(--ink,#14231e);border-color:var(--line,#cbd8d3)}
+.calendar-caption{font-size:11px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#687a72);margin-bottom:14px}
+.calendar-field .calendar-head{grid-template-columns:44px 1fr 44px;margin-bottom:16px}
+.calendar-field .calendar-head strong{font-size:18px;color:inherit}
+.calendar-field .calendar-head button{width:44px;height:44px;background:var(--wash,#eef5f1);color:var(--green,#126b51);border:1px solid var(--line,#cbd8d3)}
+.calendar-field .calendar-weekdays span{font-size:12px;padding-bottom:10px;color:var(--muted,#687a72)}
+.calendar-field .calendar-days{gap:4px}
+.calendar-field .calendar-days button{min-height:42px;padding:0;font-size:15px;border-radius:10px;color:var(--ink,#25352f)}
+.calendar-field .calendar-days button.outside{color:var(--muted,#788781);opacity:.65}
+.calendar-field .calendar-days button:disabled{opacity:.3}
+.calendar-field .calendar-days button.selected{background:#126b51;color:#fff;opacity:1}
+.calendar-field .calendar-days button:hover:not(:disabled):not(.selected){background:var(--wash,#e7f2ed);color:var(--green,#126b51)}
+.calendar-footer{display:flex;justify-content:space-between;gap:12px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line,#cbd8d3)}
+.calendar-field .calendar-footer button{min-height:40px;padding:8px 16px;border:1px solid var(--line,#cbd8d3);border-radius:9px;background:var(--wash,#eef5f1);color:var(--ink,#14231e);font:inherit;font-size:14px;font-weight:650}
+.calendar-field button:focus-visible{outline:3px solid var(--green,#126b51);outline-offset:2px}
+.intake-theme-dark .calendar-field{--paper:#242a30;--ink:#eef2f3;--line:#3a444c;--wash:#1d2328;--muted:#aab4ba;--green:#73b79f}
+.intake-theme-dark .calendar-trigger,.intake-theme-dark .calendar-trigger span{background:var(--paper);color:var(--ink);border-color:var(--line)}
+.intake-theme-dark .calendar-trigger b{color:var(--green)}
+@media(max-width:480px){.calendar-field .calendar-popover{width:min(390px,calc(100vw - 48px));padding:12px}.calendar-field .calendar-days{gap:2px}.calendar-field .calendar-days button{min-height:36px;font-size:14px}}
+
 .label-preview > .secondary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
