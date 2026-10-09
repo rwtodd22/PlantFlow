@@ -407,7 +407,12 @@ export default function Home() {
   const [jobControlsOpen, setJobControlsOpen] = useState(false);
   const [jobActionsOpen, setJobActionsOpen] = useState(false);
   const [jobsFullscreen, setJobsFullscreen] = useState(false);
-  const [pendingStatuses, setPendingStatuses] = useState<Record<string,{statusId:string;expiresAt:number}>>({});
+  const pendingStatusRef = useRef<Record<string,{statusId:string;expiresAt:number}>>({});
+  const [pendingStatuses, updatePendingStatuses] = useState(pendingStatusRef.current);
+  const setPendingStatuses=(update:typeof pendingStatuses|((current:typeof pendingStatuses)=>typeof pendingStatuses))=>{
+    pendingStatusRef.current=typeof update==="function"?update(pendingStatusRef.current):update;
+    updatePendingStatuses(pendingStatusRef.current);
+  };
   const [statusPrint, setStatusPrint] = useState<StatusDefinition[] | null>(null);
   const [managementReport, setManagementReport] = useState<ReportType | null>(null);
   const [olderScans, setOlderScans] = useState<ScanEvent[]>([]);
@@ -659,7 +664,28 @@ export default function Home() {
     window.setTimeout(() => window.print(), 100);
   };
 
-  const processScan = useCallback((raw: string) => {
+  const [scanCount,setScanCount]=useState(0);
+  const [scanFailures,setScanFailures]=useState<string[]>([]);
+  const scanQueue=useRef<ReturnType<typeof durableScanQueue>|null>(null);
+  useEffect(()=>{
+    if(!canEdit)return;
+    const queue=durableScanQueue(window.localStorage,user.uid,async item=>{
+      await cloudDataService.commitScan(item.jobId,item.code,item.prefix,item.statusId,item);
+      setNotice({kind:"success",title:`${item.code} synchronized`,detail:"Shared production records confirmed."});
+    },(count,failures)=>{setScanCount(count);setScanFailures(failures);});
+    scanQueue.current=queue;
+    const sync=()=>queue.sync();
+    queue.start();
+    const timer=window.setInterval(sync,10000);
+    window.addEventListener("online",sync);
+    window.addEventListener("storage",sync);
+    return()=>{queue.stop();scanQueue.current=null;window.clearInterval(timer);window.removeEventListener("online",sync);window.removeEventListener("storage",sync);};
+  },[user.uid,canEdit]);
+  const queueIndicator=(scanCount>0||scanFailures.length>0)?createPortal(<aside className="scanner-queue-summary" aria-live="polite">
+    {scanCount>0&&<b>{scanCount} scan{scanCount===1?"":"s"} saved on this device · Waiting to sync</b>}
+    {scanFailures.length>0&&<details open><summary>{scanFailures.length} scan save failure{scanFailures.length===1?"":"s"}</summary>{scanFailures.map((message,index)=><p key={index}>{message}</p>)}<button type="button" onClick={()=>scanQueue.current?.dismiss()}>Dismiss reviewed failures</button></details>}
+  </aside>,document.body):null;
+  const processScan = useCallback(async (raw: string) => {
     const standaloneCommand = raw.trim().toUpperCase();
     if (standaloneCommand.startsWith("STATUS:")) {
       const code = standaloneCommand.slice(7).trim();
@@ -693,29 +719,17 @@ export default function Home() {
     if (directJob?.parts?.length) { setNotice({ kind: "error", title: `Job ${job.jobNumber} is split into parts`, detail: "Scan the barcode attached to the specific part instead of the original parent-job barcode." }); return; }
     const currentStatus = state.statuses.find(item => item.name === (part?.status || job.status));
     if (currentStatus?.closesJob) { setNotice({ kind: "error", title: `Job is ${job.status.toLowerCase()}`, detail: "Reopen the job before scanning it again." }); return; }
-    const pending = pendingStatuses[department.id] || pendingStatuses.__global__;
-    const commandedStatus = pending && pending.expiresAt > Date.now() ? state.statuses.find(item=>item.id===pending.statusId&&item.enabled) : undefined;
-    const normalStatus = state.statuses.find(item=>item.code==="IN_PRODUCTION") || state.statuses.find(item=>item.enabled&&!item.closesJob);
-    if (pending) setPendingStatuses(current => Object.fromEntries(Object.entries(current).filter(([key])=>key!==department.id&&key!=="__global__")));
-    const previous = state.scans[0];
-    const trackedCode = part?.code || job.jobNumber;
-    if (!commandedStatus && previous?.jobNumber === trackedCode && previous.departmentId === department.id && Date.now() - new Date(previous.timestamp).getTime() < 30000) {
-      setNotice({ kind: "duplicate", title: "Scan already received", detail: `${trackedCode} is already in ${department.name}.` }); return;
-    }
-    const now = new Date().toISOString();
-    const routeIndex = job.route.indexOf(department.id);
-    const previousDepartmentId = part?.currentDepartmentId || job.currentDepartmentId;
-    const currentIndex = job.route.indexOf(previousDepartmentId);
-    const event: ScanEvent = { id: makeId(), jobId: job.id, timestampBasis: "recorded", jobNumber: trackedCode, departmentId: department.id, departmentName: department.name, previousDepartmentId, timestamp: now, type: commandedStatus ? "Status command" : routeIndex === currentIndex + 1 || currentIndex === -1 ? "Normal" : "Route exception", statusName: commandedStatus?.name, statusClosesJob: commandedStatus?.closesJob, partId: part?.id, partCode: part?.code, partName: part?.name };
-    const nextStatus = commandedStatus?.name || normalStatus?.name || "In Production";
-    const jobs = state.jobs.map(j => {
-      if (j.id !== job.id) return j;
-      if (!part) return { ...j, currentDepartmentId: department.id, status: nextStatus, updatedAt: now };
-      return { ...j, updatedAt: now, parts: (j.parts || []).map(item => item.id === part.id ? { ...item, currentDepartmentId: department.id, status: nextStatus, updatedAt: now } : item) };
-    });
-    persist({ ...state, jobs, scans: [event, ...state.scans] });
-    setNotice({ kind: "success", title: commandedStatus ? `${trackedCode} changed to ${commandedStatus.name}` : `${trackedCode} moved to ${department.name}`, detail: `${part ? `${part.name} · ` : ""}${department.name} · ${job.customer} · ${new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` });
-  }, [state, persist, pendingStatuses]);
+    const pending = [pendingStatusRef.current[department.id],pendingStatusRef.current.__global__].find(item=>item&&item.expiresAt>Date.now());
+    const commandedStatus = pending ? state.statuses.find(item=>item.id===pending.statusId&&item.enabled) : undefined;
+    if(pending&&!commandedStatus){setNotice({kind:"error",title:"Status unavailable",detail:"Scan an enabled status command again."});return;}
+    const trackedCode=part?.code||job.jobNumber;
+    try{
+      if(!scanQueue.current)throw new Error("Scanner is starting. Try again.");
+      scanQueue.current.add({id:crypto.randomUUID(),scannedAt:new Date().toISOString(),jobId:job.id,code:parsed.jobNumber,prefix:parsed.prefix,statusId:commandedStatus?.id});
+      setPendingStatuses({});
+      setNotice({kind:"duplicate",title:`${trackedCode} received`,detail:"Saved on this device; syncing automatically. You can scan the next job."});
+    }catch(error){setNotice({kind:"error",title:"Scan not queued",detail:error instanceof Error?error.message:"Try again."});}
+  }, [state, pendingStatuses]);
 
   useEffect(() => {
     if (viewerPortal || !canEdit) return;
@@ -727,18 +741,18 @@ export default function Home() {
         return;
       }
       const now = performance.now();
-      if (now - lastKeyAt.current > 90) scanBuffer.current = "";
+      if (now - lastKeyAt.current > 250) scanBuffer.current = "";
       lastKeyAt.current = now;
       if (event.key === "Enter") {
         const completedScan = scanBuffer.current;
         scanBuffer.current = "";
         if ((completedScan.includes("|") || completedScan.toUpperCase().startsWith("STATUS:")) && completedScan.length >= 4) {
           event.preventDefault();
-          processScan(completedScan);
+          void processScan(completedScan);
         }
         return;
       }
-      if (event.key.length === 1) scanBuffer.current += event.key;
+      if (event.key.length === 1) scanBuffer.current = (scanBuffer.current + event.key).slice(-256);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -1012,7 +1026,7 @@ export default function Home() {
 
   if (cloudStatus === "loading") return <div className="auth-screen"><div className="auth-loading"><span className="auth-spinner"/><b>Loading shared production data…</b><small>Connecting to PlantFlow Cloud</small></div></div>;
 
-  if (productionFloorPortal && canEdit) return <><ProductionFloorPortal state={state} notice={notice} onDismissNotice={()=>setNotice(null)} onSignOut={()=>void logout()} onReview={setSelectedJob} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onSplit={setSplitJob} onUpdateJob={(job,field,value)=>updateJobInline(job,field,value,true)} onUpdatePart={updatePartInline}/>{printJob&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span><span>Due {formatDate(printJob.dueDate)}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div>}{printPart&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div>}{selectedJob&&<JobEditor peopleNames={peopleNames} key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} settings={state.settings} canChangeSchedule onClose={()=>setSelectedJob(null)} onSave={(original,updated,minutes)=>saveJobOverride(original,updated,minutes,true)} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}}/>}{splitJob&&<SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/>}</>;
+  if (productionFloorPortal && canEdit) return <>{queueIndicator}<ProductionFloorPortal state={state} notice={notice} onDismissNotice={()=>setNotice(null)} onSignOut={()=>void logout()} onReview={setSelectedJob} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onSplit={setSplitJob} onUpdateJob={(job,field,value)=>updateJobInline(job,field,value,true)} onUpdatePart={updatePartInline}/>{printJob&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for job ${printJob.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE REPRINT</p><h2>Job {printJob.jobNumber}</h2></div><button aria-label="Close barcode reprint" onClick={()=>setPrintJob(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printJob.jobNumber}</strong><Code128 value={printJob.jobNumber}/><div className="reprint-details"><b>{printJob.customer}</b><span>{printJob.description}</span><span>Due {formatDate(printJob.dueDate)}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintJob(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Barcode Label</button></div></div></div>}{printPart&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Reprint barcode for ${printPart.part.code}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">PART BARCODE</p><h2>{printPart.part.code}</h2></div><button aria-label="Close part barcode reprint" onClick={()=>setPrintPart(null)}>×</button></div><div className="reprint-sheet part-label-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB PART</small><strong>{printPart.part.code}</strong><Code128 value={printPart.part.code}/><div className="reprint-details"><b>{printPart.part.name}</b><span>{printPart.part.description||printPart.job.description}</span>{printPart.part.quantity&&<span>Quantity: {printPart.part.quantity}</span>}<span>Parent Job: {printPart.job.jobNumber}</span></div></div><div className="reprint-actions"><button className="secondary" onClick={()=>setPrintPart(null)}>Cancel</button><button className="primary" onClick={printBarcode}>Print Part Label</button></div></div></div>}{selectedJob&&<JobEditor peopleNames={peopleNames} key={selectedJob.id} job={selectedJob} departments={departments} statuses={statuses} settings={state.settings} canChangeSchedule onClose={()=>setSelectedJob(null)} onSave={(original,updated,minutes)=>saveJobOverride(original,updated,minutes,true)} onPrint={()=>{setSelectedJob(null);setPrintJob(selectedJob)}}/>}{splitJob&&<SplitJobDialog job={splitJob} onClose={()=>setSplitJob(null)} onSave={parts=>saveJobSplit(splitJob,parts)}/>}</>;
   if (viewerPortal || profile.role === "viewer") return <ReadOnlyPortal state={state} onSignOut={()=>void logout()}/>;
 
   const availableNav = hasAdministrationAccess ? nav : nav.filter(item => item.id !== "admin" && item.id !== "billing");
@@ -1027,7 +1041,7 @@ export default function Home() {
     <main>
       <header><div><p className="eyebrow">SHOP FLOOR CONTROL</p><h1>{nav.find(n=>n.id===page)?.label}</h1></div><div className="header-actions"><div className="user-chip"><b>{profile.displayName || profile.email}</b><span>{profile.role}</span></div><div className="main-theme-toggle" role="group" aria-label="PlantFlow color mode"><button type="button" className={mainTheme==="light"?"active":""} aria-pressed={mainTheme==="light"} onClick={()=>changeMainTheme("light")} title="Use light mode"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.2"/><path d="M10 2.3v2M10 15.7v2M2.3 10h2M15.7 10h2M4.55 4.55l1.4 1.4M14.05 14.05l1.4 1.4M15.45 4.55l-1.4 1.4M5.95 14.05l-1.4 1.4"/></svg><span>Light</span></button><button type="button" className={mainTheme==="dark"?"active":""} aria-pressed={mainTheme==="dark"} onClick={()=>changeMainTheme("dark")} title="Use dark mode"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.8 12.5A6.3 6.3 0 0 1 7.5 4.2 6.3 6.3 0 1 0 15.8 12.5Z"/></svg><span>Dark</span></button></div><span className="date-chip">{new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</span><button type="button" className="primary small" onClick={()=>setPage("create")}>+ New job</button><button type="button" className="signout-button" onClick={()=>void logout()}>Sign out</button></div></header>
       {cloudStatus === "offline" && <div className="cloud-warning"><b>Cloud connection interrupted</b><span>PlantFlow is showing the last data saved on this device. New changes are queued and will synchronize when the connection returns.</span>{cloudError&&<small>{cloudError}</small>}</div>}
-      {notice && <div className={`notice ${notice.kind}`}><span>{notice.kind==="success"?"✓":notice.kind==="duplicate"?"↺":"!"}</span><div><strong>{notice.title}</strong><small>{notice.detail}</small></div><button onClick={()=>setNotice(null)}>×</button></div>}
+      {queueIndicator}{notice && <div className={`notice ${notice.kind}`}><span>{notice.kind==="success"?"✓":notice.kind==="duplicate"?"↺":"!"}</span><div><strong>{notice.title}</strong><small>{notice.detail}</small></div><button onClick={()=>setNotice(null)}>×</button></div>}
       {page==="create"&&createdJobConfirmation&&<div className="job-created-confirmation" role="status" aria-live="polite"><span className="job-created-check" aria-hidden="true">✓</span><div><small>PRODUCTION JOB CREATED</small><strong>Job {createdJobConfirmation.jobNumber} is ready</strong><p>{createdJobConfirmation.customer}{createdJobConfirmation.partCount?` · ${createdJobConfirmation.partCount} tracked parts`:" · Added to Active Jobs"}</p></div><button type="button" aria-label="Dismiss job-created confirmation" onClick={()=>setCreatedJobConfirmation(null)}>×</button><i aria-hidden="true"/></div>}
 
       {page === "dashboard" && <section>
@@ -1480,3 +1494,4 @@ function Admin({departments,statuses,jobs,settings,cloudStatus,onChangeSettings,
   </section>
 }
 import {CalendarDatePicker} from "./CalendarDatePicker";
+import {durableScanQueue} from "../lib/durableScanQueue";

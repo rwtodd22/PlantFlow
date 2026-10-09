@@ -1,0 +1,34 @@
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const load=async path=>import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText).toString('base64'));
+const {scanTransition:scan}=await load('lib/scanTransition.ts');
+const {parseScannerInput}=await load('lib/scanner.ts');
+const departments=[{id:'print',name:'Print',prefix:'PRINT',enabled:true}];
+const statuses=[{id:'in',name:'In Production',code:'IN_PRODUCTION',enabled:true,closesJob:false},{id:'hold',name:'On Hold',code:'ON_HOLD',enabled:true,closesJob:false},{id:'done',name:'Complete',code:'COMPLETE',enabled:true,closesJob:true}];
+const now='2026-10-08T12:00:00.000Z';
+const job={id:'j',jobNumber:'123',customer:'Customer',customerRepresentative:'Representative',projectManager:'Manager',route:[],status:'Ready',currentDepartmentId:'',updatedAt:'2026-10-08T11:00:00.000Z'};
+const apply=(j,code='123',status)=>scan(j,departments,statuses,code,'PRINT',status,now,'event');
+const first=apply(job);
+assert.equal(first.job.status,'In Production');
+assert.equal(first.job.customerRepresentative,'Representative');
+assert.equal(apply(first.job),null); // Independent of other jobs' intervening scans.
+assert.equal(apply(first.job,'123','hold').job.status,'On Hold');
+assert.throws(()=>scan(job,departments,statuses.map(s=>({...s,enabled:false})),'123','PRINT',undefined,now,'e'));
+assert.throws(()=>scan(job,[...departments,...departments],statuses,'123','PRINT',undefined,now,'e'));
+assert.throws(()=>apply({...job,status:'Complete'}));
+assert.throws(()=>apply(job,'wrong'));
+const parts={...job,parts:[{id:'a',code:'123-A',name:'A',status:'Ready',currentDepartmentId:'',updatedAt:job.updatedAt},{id:'b',code:'123-B',name:'B',status:'Ready',currentDepartmentId:'',updatedAt:job.updatedAt}]};
+assert.throws(()=>apply(parts));
+const a=apply(parts,'123-A','done');
+assert.equal(a.job.completedAt,undefined);
+// Transaction retries re-run against the latest document, preserving the other part.
+const b=apply(a.job,'123-B','done');
+assert.equal(b.job.parts[0].status,'Complete');
+assert.equal(b.job.parts[1].status,'Complete');
+assert.equal(b.job.completedAt,now);
+assert.equal(a.event.previousDepartmentId,'');
+assert.equal(parts.parts[0].status,'Ready');
+for(const invalid of ['', 'PRINT|','PRINT|123|456'])assert.equal(parseScannerInput(invalid).ok,false);
+assert.equal(parseScannerInput(' print | 123-A ').ok,true);
+console.log('PASS: normal/status scans, duplicate protection, disabled/ambiguous configuration, closed jobs, barcode validation, independent parts, completion metadata, retained names, parser.');

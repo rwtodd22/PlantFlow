@@ -1,0 +1,16 @@
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const code=ts.transpileModule(readFileSync('lib/scanQueue.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {createScanQueue}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+let release;
+const gate=new Promise(resolve=>release=resolve);
+const saved=[],failures=[],counts=[];
+const queue=createScanQueue(async item=>{if(item===1)await gate;if(item===2)throw Error('offline');saved.push(item);},count=>counts.push(count),(item)=>failures.push(item));
+queue.add(1);queue.add(2);queue.add(3);
+assert.equal(queue.count,3);assert.deepEqual(saved,[]);
+release();
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.deepEqual(saved,[1,3]);assert.deepEqual(failures,[2]);assert.equal(queue.count,0);
+assert.deepEqual(counts,[1,2,3,2,1,0]);
+console.log('PASS: immediate receipt, FIFO saves, failure reporting, continued draining, pending counts.');

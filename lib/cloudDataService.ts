@@ -1,4 +1,5 @@
 import { cleanPersonName, jobPeopleNames, rememberJobPeople, emptyPeopleNames, type PeopleNames } from "./jobPeople";
+import {scanTransition} from "./scanTransition";
 import { DocumentReference, DocumentSnapshot, Unsubscribe, arrayUnion, runTransaction, collection, doc, getDoc, getDocs, getDocsFromServer, documentId, limit, onSnapshot, orderBy, query, serverTimestamp, startAfter, where, writeBatch } from "firebase/firestore";
 import { db } from "../src/firebase";
 import { AppState, Job, ScanEvent, seedState } from "./dataService";
@@ -100,6 +101,26 @@ function peopleUpdates(jobs: Job[]) {
 }
 
 export const cloudDataService = {
+  async commitScan(jobId:string, code:string, prefix:string, statusId?:string, receipt?:{id:string;scannedAt:string}) {
+    const eventRef=receipt?doc(scansCollection,receipt.id):doc(scansCollection);
+    return runTransaction(db,async transaction=>{
+      const jobRef=doc(jobsCollection,jobId);
+      const [source,configuration,existing]=await Promise.all([transaction.get(jobRef),transaction.get(configurationDocument),transaction.get(eventRef)]);
+      if(existing.exists())return {job:source.data() as Job,event:existing.data() as ScanEvent};
+      if(!source.exists()||!configuration.exists())throw new Error("Job or configuration is unavailable. Refresh and try again.");
+      const config=configuration.data() as Configuration;
+      const latest=source.data() as Job;
+      const tracked=latest.parts?.find(p=>p.code.toUpperCase()===code)||latest;
+      if(receipt&&Date.parse(tracked.updatedAt)>Date.parse(receipt.scannedAt))throw new Error("A newer update exists for this job or part. Review this offline scan before applying it.");
+      const result=scanTransition(latest,config.departments,config.statuses,code,prefix,statusId,receipt?.scannedAt||new Date().toISOString(),eventRef.id);
+      if(!result)return null;
+      transaction.set(jobRef,firestoreDocument(result.job));
+      if(isClosed(result.job,config as AppState))transaction.delete(doc(publicJobsCollection,jobId));
+      else transaction.set(doc(publicJobsCollection,jobId),publicJob(result.job));
+      transaction.set(eventRef,firestoreDocument(result.event));
+      return result;
+    });
+  },
   async savePerson(field: "customerRepresentative" | "projectManager", name: string) {
     const cleaned = cleanPersonName(name);
     if (!cleaned) return;
