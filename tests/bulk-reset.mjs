@@ -17,7 +17,7 @@ try {
  }
  const {cloudDataService:service}=await import('./generated-bulk/cloudDataService.mjs');
  await env.withSecurityRulesDisabled(async ctx=>{
-   const db=ctx.firestore();await setDoc(doc(db,'users','admin'),{role:'admin',enabled:true});
+   const db=ctx.firestore();await setDoc(doc(db,'users','admin'),{role:'super_admin',enabled:true});
    await setDoc(doc(db,'configuration','plantflow'),{keep:true});
    await setDoc(doc(db,'archivedJobs','archive'),{keep:true});
    await setDoc(doc(db,'scanEvents','archive-history'),{jobNumber:'ARCHIVE',jobId:'archive'});
@@ -27,7 +27,12 @@ try {
  await assert.rejects(service.clearAllJobData('admin','DELETE ALL JOBS'),/No jobs were deleted/);
  assert.equal((await getDocs(collection(db,'jobs'))).size,2);
  await setDoc(doc(db,'jobs','two'),{billingState:'review'},{merge:true});
- const result=await service.clearAllJobData('admin','DELETE ALL JOBS');assert.equal(result.deleted,2);
+ await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'users','admin'),{role:'admin',enabled:true}));
+ await assert.rejects(service.clearAllJobData('admin','DELETE ALL JOBS'),/Only a Super Admin/);
+ await env.withSecurityRulesDisabled(ctx=>setDoc(doc(ctx.firestore(),'users','admin'),{role:'super_admin',enabled:true}));
+ const progress=[];
+ const result=await service.clearAllJobData('admin','DELETE ALL JOBS',(done,total,job)=>progress.push({done,total,job}));assert.equal(result.deleted,2);
+ assert.deepEqual(progress.at(-1),{done:2,total:2,job:''});
  assert.equal((await getDocs(collection(db,'jobs'))).size,0);
  assert.equal((await getDocs(collection(db,'publicJobs'))).size,0);
  assert.equal((await getDocs(collection(db,'scanEvents'))).size,1);

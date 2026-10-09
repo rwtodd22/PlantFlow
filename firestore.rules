@@ -81,7 +81,8 @@ service cloud.firestore {
     match /jobDeletions/{jobId} {
       allow read: if canManageAdministration();
       allow create: if canManageAdministration()
-        && request.resource.data.keys().hasOnly(['job', 'jobNumber', 'codes', 'state', 'requestedBy', 'requestedAt', 'confirmation'])
+        && request.resource.data.keys().hasOnly(['job', 'jobNumber', 'codes', 'state', 'requestedBy', 'requestedAt', 'confirmation', 'bulkReset'])
+        && (!request.resource.data.get('bulkReset', false) || hasRole(['super_admin']))
         && !exists(/databases/$(database)/documents/archivedJobs/$(jobId))
         && request.resource.data.job == get(/databases/$(database)/documents/jobs/$(jobId)).data
         && request.resource.data.jobNumber == request.resource.data.job.jobNumber

@@ -280,7 +280,7 @@ export const cloudDataService = {
     await batch.commit();
   },
 
-  async deleteJobPermanently(job: Job, uid: string, confirmation: string) {
+  async deleteJobPermanently(job: Job, uid: string, confirmation: string, bulkReset = false) {
     if (!uid || confirmation.trim() !== `DELETE ${job.jobNumber}`) throw new Error("Type the exact deletion phrase to continue.");
     const jobRef = doc(jobsCollection, job.id);
     const receiptRef = doc(db, "jobDeletions", job.id);
@@ -303,7 +303,7 @@ export const cloudDataService = {
       if (codes.some(code => !code || code.includes("/"))) throw new Error("This job contains an invalid barcode. Correct it before deleting.");
       const locks = await Promise.all(codes.map(code => transaction.get(doc(db, "deletionHistoryLocks", code))));
       if (locks.some(lock => lock.exists())) throw new Error("Another deletion is using this barcode. Finish that deletion first.");
-      transaction.set(receiptRef, { job: current, jobNumber: current.jobNumber, codes, state: "pending", requestedBy: uid, requestedAt: serverTimestamp(), confirmation: confirmation.trim() });
+      transaction.set(receiptRef, { job: current, jobNumber: current.jobNumber, codes, state: "pending", requestedBy: uid, requestedAt: serverTimestamp(), confirmation: confirmation.trim(), ...(bulkReset?{bulkReset:true}:{}) });
       return current;
     });
     if (!pending) return;
@@ -343,18 +343,23 @@ export const cloudDataService = {
     await deleteDocumentsInBatches(scanSnapshot.docs);
   },
 
-  async clearAllJobData(uid: string, confirmation: string) {
+  async clearAllJobData(uid: string, confirmation: string, onProgress: (done:number,total:number,jobNumber:string)=>void = ()=>{}) {
     if (!uid || confirmation.trim() !== "DELETE ALL JOBS") throw new Error("Type DELETE ALL JOBS to continue.");
+    const profile = await getDoc(doc(db, 'users', uid));
+    if (!profile.exists() || !profile.data().enabled || profile.data().removed || profile.data().role !== 'super_admin') throw new Error('Only a Super Admin can reset all jobs.');
     const snapshot = await getDocs(jobsCollection);
     const jobs = snapshot.docs.map(item => ({...item.data(), id: item.id}) as Job);
     if (jobs.some(job => job.billingState === "approved" || (!("billingState" in job) && job.billingApprovedAt))) {
       throw new Error("No jobs were deleted. Some jobs are OK to bill. Archive them or remove their billing approval before resetting jobs. Billing archives will be kept.");
     }
     let deleted = 0;
+    onProgress(0,jobs.length,"");
     for (const job of jobs) {
       try {
-        await this.deleteJobPermanently(job, uid, `DELETE ${job.jobNumber}`);
+        onProgress(deleted,jobs.length,job.jobNumber);
+        await this.deleteJobPermanently(job, uid, `DELETE ${job.jobNumber}`, true);
         deleted++;
+        onProgress(deleted,jobs.length,"");
       } catch (error) {
         throw new Error(`${deleted} of ${jobs.length} jobs deleted. Reset stopped at job ${job.jobNumber}. ${error instanceof Error ? error.message : "Check your connection and administrator access."} You can retry to finish remaining jobs.`);
       }
