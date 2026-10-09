@@ -1,4 +1,5 @@
 import {JobPeopleFields} from "./JobPeopleFields";
+import {IntakeParts,initialParts} from "./IntakeParts";
 import {includeCreatedJob} from '../lib/intakeJobs';
 import {PortalLoading} from './PortalLoading';
 import {emptyPeopleNames,jobPeopleNames,peopleFromForm} from "../lib/jobPeople";
@@ -22,7 +23,7 @@ function localDateValue(offsetDays=0) {
 }
 
 type Feedback={kind:"success"|"error";title:string;detail:string}|null;
-type LabelPreview={jobNumber:string;customer:string;description:string;dueDate:string};
+type LabelPreview={jobNumber:string;customer:string;description:string;dueDate:string;parentNumber?:string};
 
 function IntakeBarcode({value}:{value:string}) {
   const ref=useRef<SVGSVGElement>(null);
@@ -47,8 +48,9 @@ export default function JobIntakePortal() {
   const [formVersion,setFormVersion]=useState(0);
   const [jobNumber,setJobNumber]=useState("");
   const [createdJob,setCreatedJob]=useState<Job|null>(null);
+  const [createAsSplit,setCreateAsSplit]=useState(false);
+  const [parts,setParts]=useState(initialParts);
   const [printPreview,setPrintPreview]=useState<LabelPreview|null>(null);
-  const [labelPreviewOpenedFor,setLabelPreviewOpenedFor]=useState("");
   const [activeTab,setActiveTab]=useState<"create"|"viewer">("create");
   const [portalTheme,setPortalTheme]=useState<"light"|"dark">(()=>window.localStorage.getItem("plantflow-intake-theme")==="dark"?"dark":"light");
   const formRef=useRef<HTMLFormElement>(null);
@@ -97,14 +99,20 @@ export default function JobIntakePortal() {
       overtime:form.get("overtime")==="on",
       createdAt:now,updatedAt:now,createdBy:user.uid,
       createdByName:profile.displayName||profile.email,
+      ...(createAsSplit?{parts:parts.map((part,index)=>({id:makeId(),code:`${jobNumber}-${String.fromCharCode(65+index)}`,name:part.name.trim()||`Part ${String.fromCharCode(65+index)}`,description:part.description.trim(),quantity:part.quantity.trim(),currentDepartmentId:initialDepartmentId,status:initialStatus,updatedAt:now}))}:{}),
     };
+    const existingCodes=new Set(state.jobs.flatMap(item=>[item.jobNumber,...(item.parts||[]).map(part=>part.code)]).map(code=>code.toUpperCase()));
+    if([jobNumber,...(job.parts||[]).map(part=>part.code)].some(code=>existingCodes.has(code.toUpperCase()))){
+      setFeedback({kind:"error",title:"Barcode already exists",detail:"A job or part already uses one of these numbers. Choose a different job number."});return;
+    }
     setSaving(true);setFeedback(null);
     try{
       await cloudDataService.createJobFromIntake(job,["super_admin","admin"].includes(profile.role));
       setState(current=>({...current,jobs:includeCreatedJob(current.jobs,job)}));
       setFeedback({kind:"success",title:`Job ${jobNumber} created`,detail:`${job.customer} has been added to PlantFlow and is ready for production planning.`});
       setCreatedJob(job);
-      if(labelPreviewOpenedFor!==jobNumber)setPrintPreview({jobNumber,customer:job.customer,description:job.description,dueDate:job.dueDate});
+      if(!job.parts?.length)setPrintPreview({jobNumber,customer:job.customer,description:job.description,dueDate:job.dueDate});
+      setCreateAsSplit(false);setParts(initialParts());
       setJobNumber("");
       setDueDate(localDateValue(3));
       setFormVersion(current=>current+1);
@@ -113,6 +121,12 @@ export default function JobIntakePortal() {
     }catch(error){
       setFeedback({kind:"error",title:"The job was not created",detail:error instanceof Error?error.message:"PlantFlow could not save this job."});
     }finally{setSaving(false);}
+  };
+
+  const finishCreation=()=>{
+    setPrintPreview(null);setCreatedJob(null);setJobNumber("");setDueDate(localDateValue(3));
+    setCreateAsSplit(false);setParts(initialParts());setFeedback(null);
+    setFormVersion(value=>value+1);
   };
 
   const previewNumber=jobNumber.trim().toUpperCase()||createdJob?.jobNumber||"";
@@ -125,7 +139,6 @@ export default function JobIntakePortal() {
       description:String(form?.get("description")||createdJob?.description||"").trim(),
       dueDate:String(form?.get("dueDate")||createdJob?.dueDate||dueDate),
     });
-    setLabelPreviewOpenedFor(previewNumber);
   };
 
   const printLabel=()=>{
@@ -186,11 +199,12 @@ export default function JobIntakePortal() {
           {state.settings.showOvertimeOnJobCreation&&<label className="wide intake-overtime"><input type="checkbox" name="overtime"/><span><b>Overtime tracking</b><small>Count evenings, nights, and weekends for this job.</small></span></label>}
         </div>
         {state.settings.showExpectedRouteOnJobCreation&&<fieldset className="intake-route"><legend>Expected production route</legend><p>Select the departments this job is expected to visit. Production administrators can change this later.</p><div>{enabledDepartments.map(department=><label key={department.id}><input type="checkbox" name={`route-${department.id}`} defaultChecked/><span>{department.order}</span><b>{department.name}</b></label>)}</div></fieldset>}
-        <footer className="intake-actions"><button type="reset" className="secondary" disabled={saving} onClick={()=>{setDueDate(localDateValue(3));setJobNumber("");setCreatedJob(null);setLabelPreviewOpenedFor("");setFeedback(null);}}>Clear form</button><button className="primary" disabled={saving}>{saving?"Creating job…":"Create production job"}</button></footer>
-      </form><aside className="intake-label-preview"><p className="eyebrow">LABEL PREVIEW</p><h2>Job barcode</h2><p>The Code 128 barcode updates automatically as the job number is entered.</p><div className="intake-paper-label"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{previewNumber||"Enter job number"}</strong>{previewNumber?<IntakeBarcode value={previewNumber}/>:<div className="intake-barcode-placeholder">Barcode preview</div>}<p>{createdJob?`${createdJob.customer} · ${createdJob.description}`:previewNumber?"Preview label — the job has not been created yet.":"Enter a job number to preview and print its label."}</p></div><button type="button" className="primary" disabled={!previewNumber} onClick={openPrintPreview}>Print Barcode Label</button>{createdJob&&<small className="intake-label-ready">✓ Job created — this label is ready to print.</small>}</aside></div>
+        <IntakeParts enabled={createAsSplit} onToggle={setCreateAsSplit} parts={parts} onChange={setParts} jobNumber={jobNumber}/>
+        <footer className="intake-actions"><button type="reset" className="secondary" disabled={saving} onClick={()=>{setDueDate(localDateValue(3));setJobNumber("");setCreatedJob(null);setFeedback(null);setCreateAsSplit(false);setParts(initialParts());}}>Clear form</button><button className="primary" disabled={saving}>{saving?"Creating job…":"Create production job"}</button></footer>
+      </form><aside className="intake-label-preview"><p className="eyebrow">LABEL PREVIEW</p><h2>{createAsSplit?"Part barcodes":"Job barcode"}</h2><p>The Code 128 barcode updates automatically as the job number is entered.</p><div className="intake-paper-label"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{previewNumber?`${previewNumber}${createAsSplit?"-A":""}`:"Enter job number"}</strong>{previewNumber?<IntakeBarcode value={`${previewNumber}${createAsSplit?"-A":""}`}/>:<div className="intake-barcode-placeholder">Barcode preview</div>}<p>{createdJob?`${createdJob.customer} · ${createdJob.description}`:previewNumber?"Preview label — the job has not been created yet.":"Enter a job number to preview and print its label."}</p></div><button type="button" className="primary" disabled={!previewNumber||createAsSplit||Boolean(createdJob?.parts?.length)} onClick={openPrintPreview}>{createAsSplit||createdJob?.parts?.length?"Print individual labels after creation":"Print Barcode Label"}</button>{createdJob&&<div className="creation-complete" role="status"><b>✓ Job {createdJob.jobNumber} is on the production tracker.</b><p>You can reprint labels later from the job record.</p>{createdJob.parts?.map(part=><button type="button" className="secondary" key={part.id} onClick={()=>setPrintPreview({jobNumber:part.code,customer:createdJob.customer,description:`${part.name} — ${part.description||createdJob.description}`,dueDate:createdJob.dueDate,parentNumber:createdJob.jobNumber})}>Print {part.code}</button>)}<button type="button" className="primary" onClick={finishCreation}>Done — start next job</button></div>}</aside></div>
     </main>:<section className="intake-embedded-viewer" aria-label="Production Viewer"><ReadOnlyPortal state={state} embedded themeOverride={portalTheme==="dark"?"graphite":"classic"}/></section>}
     <footer className="intake-footer"><span><i/>Connected to shared PlantFlow production data</span><small>Need additional access? Contact a PlantFlow Super Admin.</small></footer>
-    {printPreview&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Print barcode for job ${printPreview.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE LABEL</p><h2>Job {printPreview.jobNumber}</h2></div><button type="button" aria-label="Close barcode label" onClick={()=>setPrintPreview(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>PRODUCTION JOB</small><strong>{printPreview.jobNumber}</strong><IntakeBarcode value={printPreview.jobNumber}/><div className="reprint-details">{printPreview.customer&&<b>{printPreview.customer}</b>}{printPreview.description&&<span>{printPreview.description}</span>}<span>Due {new Date(`${printPreview.dueDate}T12:00:00`).toLocaleDateString()}</span></div></div><div className="reprint-actions"><button type="button" className="secondary" onClick={()=>setPrintPreview(null)}>Cancel</button><button type="button" className="primary" onClick={printLabel}>Print Barcode Label</button></div></div></div>}
+    {printPreview&&<div className="reprint-overlay" role="dialog" aria-modal="true" aria-label={`Print barcode for job ${printPreview.jobNumber}`}><div className="reprint-modal"><div className="reprint-head"><div><p className="eyebrow">BARCODE LABEL</p><h2>Job {printPreview.jobNumber}</h2></div><button type="button" aria-label="Close barcode label" onClick={()=>setPrintPreview(null)}>×</button></div><div className="reprint-sheet"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><small>{printPreview.parentNumber?`PRODUCTION JOB PART · JOB ${printPreview.parentNumber}`:"PRODUCTION JOB"}</small><strong>{printPreview.jobNumber}</strong><IntakeBarcode value={printPreview.jobNumber}/><div className="reprint-details">{printPreview.customer&&<b>{printPreview.customer}</b>}{printPreview.description&&<span>{printPreview.description}</span>}<span>Due {new Date(`${printPreview.dueDate}T12:00:00`).toLocaleDateString()}</span></div></div>{createdJob&&<p className="creation-complete">✓ Job {createdJob.jobNumber} is on the production tracker. {createdJob.parts?.length?"Close this label to print another part, or select Done to finish.":"Print the label if needed, then select Done to clear the form."}</p>}<div className="reprint-actions"><button type="button" className="secondary" onClick={()=>setPrintPreview(null)}>{createdJob?"Close label":"Cancel"}</button>{createdJob&&<button type="button" className="secondary" onClick={finishCreation}>Done</button>}<button type="button" className="primary" onClick={printLabel}>Print Barcode Label</button></div></div></div>}
   </div>;
 }
 import {CalendarDatePicker} from "./CalendarDatePicker";

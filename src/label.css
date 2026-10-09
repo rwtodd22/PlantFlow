@@ -918,6 +918,29 @@ td small,
   background: #fff;
 }
 
+.creation-complete {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid #b7d7c8;
+  border-radius: 10px;
+  background: #edf7f1;
+  color: #155f48;
+  text-align: center;
+}
+.creation-complete p { font-size: 13px; margin: 8px 0; }
+.creation-complete button { margin: 5px; }
+.intake-portal .create-split-section { margin: 20px; }
+.intake-portal .create-part-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.intake-portal .create-part-code { grid-column: 1 / -1; }
+.intake-theme-dark .create-split-section,
+.intake-theme-dark .create-part-row,
+.intake-theme-dark .create-part-row input { background: #222a30; color: #e6eeeb; border-color: #46535a !important; }
+.intake-theme-dark .create-part-row label > span,
+.intake-theme-dark .create-part-code { color: #a9d8c7; }
+.intake-theme-dark .creation-complete,
+.app-theme-dark .creation-complete { background: #213d33; color: #c5eddb; border-color: #456e5c; }
+@media(max-width:560px) { .intake-portal .create-part-row { grid-template-columns: minmax(0,1fr); } }
+
 .create-split-section {
   margin-top: 20px !important;
   border: 1px solid #dce6e1 !important;
