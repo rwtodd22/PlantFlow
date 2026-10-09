@@ -828,18 +828,20 @@ export default function Home() {
     }
   };
 
-  const clearAllJobData = async () => {
+  const clearAllJobData = async (confirmation: string) => {
+    if (!hasAdministrationAccess || cloudStatus !== "ready") throw new Error("Connect as an administrator before resetting jobs.");
     try {
-      await cloudDataService.clearAllJobData();
-      const next = { ...state, jobs: [], scans: [] };
-      setState(next);
-      dataService.save(next);
-      setOlderScans([]);
-      setHistoryHasMore(false);
+      const result = await cloudDataService.clearAllJobData(user.uid, confirmation);
+      const ids = new Set(result.jobs.map(job => job.id));
+      const codes = new Set(result.jobs.flatMap(job => [job.jobNumber, ...(job.parts || []).map(part => part.code)]));
+      const retain = (scan: ScanEvent) => scan.jobId ? !ids.has(scan.jobId) : !codes.has(scan.jobNumber);
+      setState(current => {const next={...current,jobs:current.jobs.filter(job=>!ids.has(job.id)),scans:current.scans.filter(retain)};dataService.save(next);return next;});
+      setOlderScans(current=>current.filter(retain));
       setSelectedJob(null);
-      setNotice({ kind: "success", title: "PlantFlow job data reset", detail: "All jobs and movement history were removed. Departments, statuses, settings, and user access were preserved." });
+      setNotice({ kind: "success", title: `${result.deleted} jobs permanently deleted`, detail: "Their parts and movement history were removed. Billing archives, unrelated history, configuration, and user access were preserved." });
     } catch (error) {
       setNotice({ kind: "error", title: "Job reset did not complete", detail: error instanceof Error ? error.message : "The cloud deletion did not complete." });
+      throw error;
     }
   };
 
@@ -1424,23 +1426,25 @@ function ActiveJobDeleteAction({job,onDelete}:{job:Job;onDelete:(job:Job,confirm
   </div>;
 }
 
-function DataMaintenancePanel({jobCount,onClearAllJobs}:{jobCount:number;onClearAllJobs:()=>void|Promise<void>}) {
+function DataMaintenancePanel({jobCount,onClearAllJobs}:{jobCount:number;onClearAllJobs:(confirmation:string)=>void|Promise<void>}) {
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
   const [confirmationOpen,setConfirmationOpen]=useState(false);
   const [confirmationText,setConfirmationText]=useState("");
   const requiredText="DELETE ALL JOBS";
   const closeConfirmation=()=>{setConfirmationOpen(false);setConfirmationText("");};
-  const confirmDeletion=async()=>{if(confirmationText!==requiredText)return;await onClearAllJobs();closeConfirmation();};
+  const confirmDeletion=async()=>{if(confirmationText!==requiredText||busy)return;setBusy(true);setError("");try{await onClearAllJobs(confirmationText);closeConfirmation();}catch(error){setError(error instanceof Error?error.message:"Reset failed. Please retry.");}finally{setBusy(false);}};
   return <section className="panel data-maintenance-panel reset-site-panel">
     <div>
       <p className="eyebrow">RESET SITE DATA</p>
       <h2>Clear all job data</h2>
-      <p>Use this only when PlantFlow needs a clean restart. It permanently removes every job, tracked part, and movement record. Departments, statuses, settings, and user accounts are preserved.</p>
+      <p>Permanently remove all current jobs, their parts, and their movement history. Billing archives and their history, departments, statuses, settings, and users are preserved. Jobs marked OK to bill must be archived or unapproved first.</p>
     </div>
     <div className="data-maintenance-actions">
       <span>{jobCount} {jobCount===1?"job":"jobs"} currently stored</span>
       <button type="button" className="danger-button" disabled={!jobCount} onClick={()=>{setConfirmationText("");setConfirmationOpen(true);}}>Reset all job data</button>
     </div>
-    {confirmationOpen&&<div className="data-delete-confirmation" role="dialog" aria-modal="true" aria-label="Confirm clearing all job data"><div><b>Permanently clear all job data?</b><span>Every job, job part, and movement record will be removed. Configuration and users remain.</span><label>Type <strong>{requiredText}</strong> to continue<input autoFocus value={confirmationText} onChange={event=>setConfirmationText(event.target.value)} /></label><div><button type="button" className="secondary" onClick={closeConfirmation}>Cancel</button><button type="button" className="danger-button" disabled={confirmationText!==requiredText} onClick={()=>void confirmDeletion()}>Delete permanently</button></div></div></div>}
+    {confirmationOpen&&<div className="data-delete-confirmation" role="dialog" aria-modal="true" aria-label="Confirm clearing all job data"><div><b>Permanently clear all job data?</b><span>Current jobs, their parts, and their history will be removed. Billing archives and unrelated history remain. This cannot be undone.</span><label>Type <strong>{requiredText}</strong> to continue<input autoFocus disabled={busy} value={confirmationText} onChange={event=>setConfirmationText(event.target.value)} /></label>{error&&<p role="alert" className="auth-error">{error}</p>}{busy&&<p role="status">Deleting jobs and their histories. Please keep this page open.</p>}<div><button type="button" className="secondary" disabled={busy} onClick={closeConfirmation}>Cancel</button><button type="button" className="danger-button" disabled={busy||confirmationText!==requiredText} onClick={()=>void confirmDeletion()}>{busy?"Deleting jobs…":"Delete permanently"}</button></div></div></div>}
   </section>;
 }
 

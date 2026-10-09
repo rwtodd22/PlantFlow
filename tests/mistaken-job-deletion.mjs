@@ -77,7 +77,8 @@ export async function testMistakenJobDeletion(env, service, template) {
   await seed(split);
   await service.deleteJobPermanently(split,'admin',`DELETE ${split.jobNumber}`);
   assert.equal((await getDoc(doc(admin,'jobs',split.id))).exists(),false);
-  await assert.rejects(service.clearAllJobData(),/Bulk reset is disabled/);
+  await assert.rejects(service.clearAllJobData(),/DELETE ALL JOBS/);
+  await assert.rejects(service.clearAllJobData('admin','DELETE ALL JOBS'),/OK to bill/);
   assert.equal((await getDoc(doc(admin,'jobs',approved.id))).exists(),true);
   console.log('PASS: explicit admin deletion, 511-event cleanup, receipt integrity, typed confirmation, denied roles, archived/approved protection, interrupted retry, stale-client blocking, safe job-number reuse.');
 }

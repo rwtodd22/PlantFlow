@@ -343,9 +343,23 @@ export const cloudDataService = {
     await deleteDocumentsInBatches(scanSnapshot.docs);
   },
 
-  async clearAllJobData() {
-    // Do not erase history/public copies before the protected job delete fails.
-    throw new Error("Bulk reset is disabled to protect billing records. Delete mistaken jobs individually from Review Job.");
+  async clearAllJobData(uid: string, confirmation: string) {
+    if (!uid || confirmation.trim() !== "DELETE ALL JOBS") throw new Error("Type DELETE ALL JOBS to continue.");
+    const snapshot = await getDocs(jobsCollection);
+    const jobs = snapshot.docs.map(item => ({...item.data(), id: item.id}) as Job);
+    if (jobs.some(job => job.billingState === "approved" || (!("billingState" in job) && job.billingApprovedAt))) {
+      throw new Error("No jobs were deleted. Some jobs are OK to bill. Archive them or remove their billing approval before resetting jobs. Billing archives will be kept.");
+    }
+    let deleted = 0;
+    for (const job of jobs) {
+      try {
+        await this.deleteJobPermanently(job, uid, `DELETE ${job.jobNumber}`);
+        deleted++;
+      } catch (error) {
+        throw new Error(`${deleted} of ${jobs.length} jobs deleted. Reset stopped at job ${job.jobNumber}. ${error instanceof Error ? error.message : "Check your connection and administrator access."} You can retry to finish remaining jobs.`);
+      }
+    }
+    return {deleted, jobs};
   },
 
   subscribe(onState: (state: AppState | null) => void, onError: (error: Error) => void): Unsubscribe {
