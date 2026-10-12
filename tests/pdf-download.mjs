@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import {jsPDF} from 'jspdf';
+let code=ts.transpileModule(fs.readFileSync(new URL('../lib/downloadReport.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+for(const name of ['jspdf','jspdf-autotable'])code=code.replace(`from '${name}'`,`from '${import.meta.resolve(name)}'`);
+const {downloadReport}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const element=(tag,text='',children=[])=>({tagName:tag,innerText:text,textContent:text,children,matches:()=>false});
+const cell=text=>({innerText:text,colSpan:1});
+const table={...element('TABLE'),tHead:{rows:[{cells:['Job','Description'].map(cell)}]},tBodies:[{rows:Array.from({length:150},(_,i)=>({cells:[`JOB-${i}`,`Customer project ${i} with a longer description to test wrapping and pagination.`].map(cell)}))}]};
+const title=element('H1','Current Production View');
+const root={children:[title,table],querySelector:selector=>selector==='h1'?title:null};
+let downloads=0;
+jsPDF.API.save=function(filename){assert.match(filename,/^PlantFlow_Current_Production_View_.*\.pdf$/);assert.ok(this.getNumberOfPages()>1);const pdf=this.output();assert.ok(pdf.includes('JOB-149'));assert.ok(!pdf.includes('Create Job'));downloads++;return this;};
+await downloadReport(root);
+await downloadReport(root);
+assert.equal(downloads,2);
+console.log('PDF download: repeated downloads, multipage tables, and final row passed.');
