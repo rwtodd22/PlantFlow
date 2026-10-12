@@ -180,10 +180,10 @@ export default function JobIntakePortal() {
 
   return <div className={`intake-portal intake-theme-${portalTheme}`}>
     <header className="intake-header"><div className="intake-brand"><img src={worthHigginsLogo} alt="Worth Higgins & Associates"/><div><p className="eyebrow">PLANTFLOW JOB INTAKE</p><h1>Job Creation Portal</h1><span>Create a production record and send it directly into PlantFlow.</span></div></div><div className="intake-header-tools"><div className="intake-theme-toggle" role="group" aria-label="Job Creation Portal color mode"><button type="button" className={portalTheme==="light"?"active":""} aria-pressed={portalTheme==="light"} onClick={()=>changePortalTheme("light")}>Light</button><button type="button" className={portalTheme==="dark"?"active":""} aria-pressed={portalTheme==="dark"} onClick={()=>changePortalTheme("dark")}>Dark</button></div><div className="intake-user"><div><b>{profile.displayName||profile.email}</b><small>Job creation access</small></div><button type="button" onClick={()=>void logout()}>Sign out</button></div></div></header>
-    <nav className="intake-tabs" aria-label="Job Creation Portal sections">
+    <nav className="intake-tabs" aria-label="Job Creation Portal sections"><div className="intake-tab-buttons">
       <button type="button" className={activeTab==="create"?"active":""} aria-current={activeTab==="create"?"page":undefined} onClick={()=>setActiveTab("create")}><span>＋</span><div><b>Create Job</b><small>Enter and label a new production job</small></div></button>
       <button type="button" className={activeTab==="viewer"?"active":""} aria-current={activeTab==="viewer"?"page":undefined} onClick={()=>setActiveTab("viewer")}><span>≡</span><div><b>Production Viewer</b><small>Review the live production workload</small></div></button>
-    </nav>
+    </div></nav>
     {activeTab==="create"?<main className="intake-main">
       {feedback&&<div className={`intake-feedback ${feedback.kind}`} role="status"><span>{feedback.kind==="success"?"✓":"!"}</span><div><b>{feedback.title}</b><small>{feedback.detail}</small></div><button type="button" aria-label="Dismiss message" onClick={()=>setFeedback(null)}>×</button></div>}
       <div className="intake-workspace"><form ref={formRef} key={formVersion} className="intake-form" onSubmit={submit}>

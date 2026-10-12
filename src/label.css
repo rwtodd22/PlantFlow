@@ -5689,3 +5689,10 @@ tr.deadline-overdue .status-pill.green {
 .wf-filter-toggle span { margin: 0; }
 .viewer-table .viewer-reprint-column { width: 1%; text-align: right; white-space: nowrap; }
 .viewer-table .viewer-reprint-column .viewer-reprint-button { margin: 0; }
+.intake-tab-buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; width: calc(100% - 318px); }
+.intake-tabs { padding-inline: 14px; }
+@media(min-width:761px) { .intake-tabs { padding-inline: 40px; } }
+@media(max-width:700px) {
+  .intake-tabs { width: min(100% - 20px,600px); padding-inline: 14px; }
+  .intake-tab-buttons { width: 100%; }
+}
