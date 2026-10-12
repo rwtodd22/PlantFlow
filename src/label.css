@@ -5248,13 +5248,15 @@ tr.deadline-overdue .status-pill.green {
 .intake-user button { padding: 9px 12px; border: 1px solid #ccd8d2; border-radius: 8px; background: #fff; color: #385148; font-size: 10px; font-weight: 800; }
 
 .intake-main { width: min(1240px,calc(100% - 36px)); margin: 28px auto 60px; }
-.intake-tabs { width: min(1240px,calc(100% - 36px)); display: flex; gap: 8px; margin: 20px auto 0; padding: 5px; border: 1px solid #d7e2dd; border-radius: 13px; background: #eaf1ed; }
-.intake-tabs button { display: flex; align-items: center; gap: 10px; min-width: 210px; padding: 10px 14px; border: 0; border-radius: 9px; background: transparent; color: #5e7169; text-align: left; cursor: pointer; }
-.intake-tabs button > span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; background: #dce8e2; color: #3f6b5b; font-size: 15px; font-weight: 800; }
+.intake-tabs { width: min(1240px,calc(100% - 36px)); display: flex; gap: 12px; margin: 20px auto 0; padding: 0; border: 0; background: transparent; }
+.intake-tabs button { display: flex; align-items: center; gap: 12px; min-width: 250px; padding: 16px 20px; border: 1px solid #bbcec4; border-radius: 10px; background: #fff; color: #314e42; text-align: left; cursor: pointer; }
+.intake-tabs button > span { width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px; background: #dce8e2; color: #3f6b5b; font-size: 20px; font-weight: 800; }
 .intake-tabs button b,.intake-tabs button small { display: block; }
-.intake-tabs button b { font-size: 10px; }
-.intake-tabs button small { margin-top: 2px; color: #7b8983; font-size: 8px; }
-.intake-tabs button.active { background: #fff; color: #153c2f; box-shadow: 0 2px 8px rgba(20,52,40,.08); }
+.intake-tabs button b { font-size: 15px; }
+.intake-tabs button small { margin-top: 4px; color: #63756c; font-size: 11px; }
+.intake-tabs button.active { background: #e3f1eb; border-color: #17694f; color: #153c2f; box-shadow: inset 0 -3px 0 #17694f; }
+.intake-tabs button:hover { border-color: #17694f; }
+.intake-tabs button:focus-visible { outline: 2px solid #388b6d; outline-offset: 3px; }
 .intake-tabs button.active > span { background: #17694f; color: #fff; }
 .intake-embedded-viewer { width: min(1440px,calc(100% - 36px)); margin: 18px auto 60px; }
 .viewer-embedded { min-height: auto; overflow: hidden; border: 1px solid #dce6e1; border-radius: 17px; box-shadow: 0 14px 38px rgba(20,45,36,.06); }
@@ -5342,11 +5344,11 @@ tr.deadline-overdue .status-pill.green {
 .intake-theme-dark .intake-theme-toggle { border-color: #46545b; background: #141a1f; }
 .intake-theme-dark .intake-theme-toggle button { color: #9eaaa6; }
 .intake-theme-dark .intake-theme-toggle button.active { background: #344149; color: #fff; box-shadow: none; }
-.intake-theme-dark .intake-tabs { border-color: #39464c; background: #13191e; }
-.intake-theme-dark .intake-tabs button { color: #aeb8b4; }
+.intake-theme-dark .intake-tabs { background: transparent; }
+.intake-theme-dark .intake-tabs button { color: #d7e3dd; background: #212a30; border-color: #50675d; }
 .intake-theme-dark .intake-tabs button > span { background: #29343a; color: #a9cdbf; }
 .intake-theme-dark .intake-tabs button small { color: #8f9b97; }
-.intake-theme-dark .intake-tabs button.active { background: #283239; color: #f2f6f4; box-shadow: none; }
+.intake-theme-dark .intake-tabs button.active { background: #28463a; border-color: #70b69a; color: #f2f6f4; box-shadow: inset 0 -3px 0 #70b69a; }
 .intake-theme-dark .intake-tabs button.active > span { background: #388b6d; color: #fff; }
 .intake-theme-dark .intake-form,
 .intake-theme-dark .intake-label-preview { border-color: #3a474e; background: #212a30; box-shadow: 0 14px 38px rgba(0,0,0,.2); }
