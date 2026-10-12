@@ -5651,3 +5651,10 @@ tr.deadline-overdue .status-pill.green {
 .viewer-table .viewer-reprint-button:focus-visible { outline: 2px solid #32866c; outline-offset: 2px; }
 .viewer-theme-graphite .viewer-table .viewer-reprint-button { color: #a9d5c4; border-color: #50675d; background: transparent; }
 .viewer-theme-graphite .viewer-table .viewer-reprint-button:hover { background: #30453d; border-color: #82b29f; }
+.viewer-manager-filter { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; margin-bottom: 16px; }
+.viewer-manager-filter h3 { margin: 0 0 5px; font-size: 16px; }
+.viewer-manager-filter p { margin: 0; font-size: 13px; }
+.viewer-manager-filter select { min-height: 40px; width: 100%; padding: 8px 12px; border: 1px solid #cbdad3; border-radius: 8px; background: #fff; color: #14231e; font-size: 14px; }
+.viewer-manager-filter label { width: min(300px, 100%); }
+.viewer-theme-graphite .viewer-manager-filter select { background: #212a30; color: #edf2f0; border-color: #50675d; }
+@media(max-width:600px) { .viewer-manager-filter { align-items: stretch; flex-direction: column; } .viewer-manager-filter label { width: 100%; } }
