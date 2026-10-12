@@ -9,9 +9,10 @@ const element=(tag,text='',children=[])=>({tagName:tag,innerText:text,textConten
 const cell=text=>({innerText:text,colSpan:1});
 const table={...element('TABLE'),tHead:{rows:[{cells:['Job','Description'].map(cell)}]},tBodies:[{rows:Array.from({length:150},(_,i)=>({cells:[`JOB-${i}`,`Customer project ${i} with a longer description to test wrapping and pagination.`].map(cell)}))}]};
 const title=element('H1','Current Production View');
-const root={children:[title,table],querySelector:selector=>selector==='h1'?title:null};
+const metrics={...element('DIV'),matches:()=>true,children:[['150','Jobs shown'],['0','Notes included'],['Active jobs','Record selection'],['Project Manager','Sort order']].map(([value,label])=>({...element('SPAN',value+label),querySelector:()=>({textContent:value})}))};
+const root={children:[title,metrics,table],querySelector:selector=>selector==='h1'?title:null};
 let downloads=0;
-jsPDF.API.save=function(filename){assert.match(filename,/^PlantFlow_Current_Production_View_.*\.pdf$/);assert.ok(this.getNumberOfPages()>1);const pdf=this.output();assert.ok(pdf.includes('JOB-149'));assert.ok(!pdf.includes('Create Job'));downloads++;return this;};
+jsPDF.API.save=function(filename){assert.match(filename,/^PlantFlow_Current_Production_View_.*\.pdf$/);assert.ok(this.getNumberOfPages()>1);const pdf=this.output();assert.ok(pdf.includes('JOB-149'));assert.ok(!pdf.includes('Create Job'));if(process.env.PDF_PREVIEW_PATH)fs.writeFileSync(process.env.PDF_PREVIEW_PATH,Buffer.from(this.output('arraybuffer')));downloads++;return this;};
 await downloadReport(root);
 await downloadReport(root);
 assert.equal(downloads,2);
