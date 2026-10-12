@@ -5685,3 +5685,5 @@ tr.deadline-overdue .status-pill.green {
 .job-controls .wf-filter-toggle, .viewer-controls .wf-filter-toggle { display: flex; flex-direction: row; align-items: center; gap: 8px; grid-column: 1 / -1; cursor: pointer; }
 .wf-filter-toggle input[type="checkbox"] { width: 17px; height: 17px; min-height: 0; margin: 0; accent-color: #155f48; }
 .wf-filter-toggle span { margin: 0; }
+.viewer-table .viewer-reprint-column { width: 1%; text-align: right; white-space: nowrap; }
+.viewer-table .viewer-reprint-column .viewer-reprint-button { margin: 0; }
