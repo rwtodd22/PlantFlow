@@ -5658,3 +5658,10 @@ tr.deadline-overdue .status-pill.green {
 .viewer-manager-filter label { width: min(300px, 100%); }
 .viewer-theme-graphite .viewer-manager-filter select { background: #212a30; color: #edf2f0; border-color: #50675d; }
 @media(max-width:600px) { .viewer-manager-filter { align-items: stretch; flex-direction: column; } .viewer-manager-filter label { width: 100%; } }
+.viewer-manager-multi { flex-direction: column; align-items: stretch; }
+.viewer-manager-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.viewer-manager-choices button { padding: 7px 12px; min-height: 34px; border: 1px solid #cbdad3; border-radius: 8px; background: transparent; color: #356452; font-size: 13px; }
+.viewer-manager-choices button[aria-pressed="true"] { background: #155f48; border-color: #155f48; color: #fff; }
+.viewer-manager-choices button:focus-visible { outline: 2px solid #32866c; outline-offset: 3px; }
+.viewer-theme-graphite .viewer-manager-choices button { color: #a9d5c4; border-color: #50675d; }
+.viewer-theme-graphite .viewer-manager-choices button[aria-pressed="true"] { color: #fff; background: #286e58; border-color: #82b29f; }
