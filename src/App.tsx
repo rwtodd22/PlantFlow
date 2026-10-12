@@ -1174,7 +1174,7 @@ function ProductionFloorPortal({canChangeSchedule,state,notice,onDismissNotice,o
 
 export function ReadOnlyPortal({state,onSignOut,embedded=false,themeOverride,onReprint,managerFilter}:{managerFilter?:{uid:string;name:string;names:string[]};state:typeof seedState;onReprint?:(job:Job,part?:JobPart)=>void;onSignOut?:()=>void;embedded?:boolean;themeOverride?:"classic"|"graphite"}) {
   const normalizeManager=(name:string)=>name.trim().replace(/\s+/g," ").toLocaleLowerCase();
-  const [selectedManagers,setSelectedManagers]=useState<string[]|null>(managerFilter?[normalizeManager(managerFilter.name)]:null);
+  const [selectedManagers,setSelectedManagers]=useState<string[]|null>(null);
   const managers=[...new Map([...(managerFilter?.names||[]),...state.jobs.map(job=>job.projectManager||""),managerFilter?.name||""].filter(name=>name.trim()).map(name=>[normalizeManager(name),name.trim()])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
   const managerJobs=state.jobs.filter(job=>!managerFilter||selectedManagers===null||selectedManagers.includes(normalizeManager(job.projectManager||""))||(!job.projectManager?.trim()&&selectedManagers.includes(normalizeManager(managerFilter.name))&&job.createdBy===managerFilter.uid));
   type ViewerTheme = "classic"|"graphite";
@@ -1229,11 +1229,11 @@ export function ReadOnlyPortal({state,onSignOut,embedded=false,themeOverride,onR
       {managerFilter&&<section className="viewer-manager-filter viewer-manager-multi panel" aria-label="Project manager filter">
         <div><h3>Active project managers</h3><p>Toggle names to show their jobs.</p></div>
         <div className="viewer-manager-choices">
-          <button type="button" aria-pressed={selectedManagers===null||selectedManagers.includes(normalizeManager(managerFilter.name))} onClick={()=>setSelectedManagers(current=>{const selected=current??managers.map(([id])=>id);const own=normalizeManager(managerFilter.name);return selected.includes(own)?selected.filter(id=>id!==own):[...selected,own]})}>{managerFilter.name} (you)</button>
-          <details className="viewer-manager-dropdown"><summary>Other project managers <span>{selectedManagers===null?"Everyone":`${selectedManagers.filter(id=>id!==normalizeManager(managerFilter.name)).length} selected`}</span></summary>
+          <button type="button" title="Show only my project-manager jobs" aria-pressed={selectedManagers?.length===1&&selectedManagers[0]===normalizeManager(managerFilter.name)} onClick={()=>setSelectedManagers([normalizeManager(managerFilter.name)])}>{managerFilter.name} — only mine</button>
+          <details className="viewer-manager-dropdown"><summary>Select project managers <span>{selectedManagers===null?"Everyone":`${selectedManagers.length} selected`}</span></summary>
             <div className="viewer-manager-options">
               <label><input type="checkbox" checked={selectedManagers===null} onChange={event=>setSelectedManagers(event.target.checked?null:[])}/>Everyone</label>
-              {managers.filter(([key])=>key!==normalizeManager(managerFilter.name)).map(([key,name])=><label key={key}><input type="checkbox" checked={selectedManagers===null||selectedManagers.includes(key)} onChange={()=>setSelectedManagers(current=>{const selected=current??managers.map(([id])=>id);return selected.includes(key)?selected.filter(id=>id!==key):[...selected,key]})}/>{name}</label>)}
+              {managers.map(([key,name])=><label key={key}><input type="checkbox" checked={selectedManagers===null||selectedManagers.includes(key)} onChange={()=>setSelectedManagers(current=>{const selected=current??managers.map(([id])=>id);return selected.includes(key)?selected.filter(id=>id!==key):[...selected,key]})}/>{name}{key===normalizeManager(managerFilter.name)?" (you)":""}</label>)}
             </div>
           </details>
         </div>
