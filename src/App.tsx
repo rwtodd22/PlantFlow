@@ -1273,6 +1273,7 @@ function PortalJobNoteDialog({job,note,department,departmentName,timeHere,onClos
 }
 
 function PortalViewReport({groups,notes,departmentName,scope,search,sort,onClose}:{groups:{key:string;label:string;jobs:Job[]}[];notes:Record<string,string>;departmentName:(id:string)=>string;scope:"active"|"starred"|"all";search:string;sort:string;onClose:()=>void}) {
+  const [printError,setPrintError]=useState("");
   const titleBefore = useRef(document.title);
   useEffect(()=>{
     const finish=()=>{document.body.classList.remove("printing-portal-view");document.title=titleBefore.current};
@@ -1280,10 +1281,19 @@ function PortalViewReport({groups,notes,departmentName,scope,search,sort,onClose
     return()=>{window.removeEventListener("afterprint",finish);finish()};
   },[]);
   const print=()=>{
+    setPrintError("");
     titleBefore.current=document.title;
     document.title=`PlantFlow_Portal_View_${localDateValue()}`;
     document.body.classList.add("printing-portal-view");
-    window.setTimeout(()=>window.print(),100);
+    // Keep printing in the user's click gesture (especially important in Safari).
+    // Reapply print mode every time, including after a cancelled print dialog.
+    try {
+      window.print();
+    } catch {
+      setPrintError("The browser could not open printing. Please try again.");
+      document.body.classList.remove("printing-portal-view");
+      document.title=titleBefore.current;
+    }
   };
   const jobCount=groups.reduce((total,group)=>total+group.jobs.length,0);
   const scopeLabel=scope==="active"?"Active jobs":scope==="starred"?"Starred jobs":"All job records";
@@ -1296,7 +1306,7 @@ function PortalViewReport({groups,notes,departmentName,scope,search,sort,onClose
         {groups.map(group=><section className="portal-print-group" key={group.key}><h2>{group.label}<span>{group.jobs.length}</span></h2><table><thead><tr><th>Job</th><th>Customer / Description</th><th>Department</th><th>Status</th><th>Priority</th><th>Due</th></tr></thead><tbody>{group.jobs.map(job=><Fragment key={job.id}><tr className={notes[job.id]?"portal-print-job-with-note":""}><td><b>{job.jobNumber}</b> <WideFormatBadge job={job}/></td><td><b>{job.customer}</b><small>{job.description}</small></td><td>{parentLocation(job,departmentName)}</td><td>{parentStatus(job)}</td><td>{job.priority}</td><td>{formatDate(job.dueDate)}</td></tr>{notes[job.id]&&<tr className="portal-print-note"><td colSpan={6}><div><b>{job.jobNumber} · Note</b><span>{notes[job.id]}</span></div></td></tr>}</Fragment>)}</tbody></table></section>)}
         <footer>Prepared from the PlantFlow Production Information Portal · Personal notes are stored on this viewer’s device</footer>
       </article>
-      <div className="portal-report-actions"><button type="button" className="secondary" onClick={onClose}>Close</button><button type="button" className="primary" onClick={print}>Print / Save as PDF</button></div>
+      <div className="portal-report-actions">{printError&&<p role="alert">{printError}</p>}<button type="button" className="secondary" onClick={onClose}>Close</button><button type="button" className="primary" onClick={print}>Print / Save as PDF</button></div>
     </div>
   </div>;
 }

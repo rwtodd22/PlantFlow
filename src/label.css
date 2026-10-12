@@ -3627,6 +3627,9 @@ tr.deadline-overdue .status-pill.green {
   }
 
   .printing-portal-view .viewer-header,
+  .printing-portal-view .intake-header,
+  .printing-portal-view .intake-tabs,
+  .printing-portal-view .viewer-embedded-header,
   .printing-portal-view .viewer-main,
   .printing-portal-view .portal-report-head,
   .printing-portal-view .portal-report-actions {
@@ -3636,6 +3639,8 @@ tr.deadline-overdue .status-pill.green {
   html:has(.printing-portal-view),
   .printing-portal-view,
   .printing-portal-view #root,
+  .printing-portal-view .intake-portal,
+  .printing-portal-view .intake-embedded-viewer,
   .printing-portal-view .viewer-portal,
   .printing-portal-view .portal-report-overlay,
   .printing-portal-view .portal-report-modal {
