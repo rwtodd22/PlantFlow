@@ -5701,3 +5701,12 @@ tr.deadline-overdue .status-pill.green {
   .intake-tabs { width: min(100% - 20px,600px); padding-inline: 14px; }
   .intake-tab-buttons { width: 100%; }
 }
+.viewer-groups, .jobs-workspace {
+  /* Filtering must not anchor the viewport to rows that disappear. Keep enough
+     space below the controls to avoid scroll clamping on short/empty results. */
+  overflow-anchor: none;
+  min-height: 100vh;
+}
+@media print {
+  .viewer-groups, .jobs-workspace { min-height: 0; }
+}
