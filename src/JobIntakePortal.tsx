@@ -76,6 +76,13 @@ export default function JobIntakePortal() {
     event.preventDefault();
     const formElement=event.currentTarget;
     const form=new FormData(formElement);
+    const people=peopleFromForm(form);
+    if(!people.customerRepresentative||!people.projectManager){
+      setFeedback({kind:"error",title:"Account Representative and Project Manager are required",detail:"Please select or add a name for both fields before creating the job."});
+      const missing=!people.customerRepresentative?"customerRepresentative":"projectManager";
+      formElement.querySelector<HTMLInputElement>(`input[name="${missing}"]`)?.parentElement?.querySelector<HTMLButtonElement>(".person-select-trigger")?.focus();
+      return;
+    }
     const jobNumber=String(form.get("jobNumber")||"").trim().toUpperCase();
     if(state.jobs.some(job=>job.jobNumber.toUpperCase()===jobNumber)){
       setFeedback({kind:"error",title:"That job number already exists",detail:`Job ${jobNumber} is already stored in PlantFlow.`});
@@ -191,7 +198,7 @@ export default function JobIntakePortal() {
         <div className="intake-fields">
           <label><span>PACE job number *</span><input name="jobNumber" required autoFocus placeholder="e.g. 590042" autoComplete="off" value={jobNumber} onChange={event=>{setJobNumber(event.target.value.toUpperCase());if(createdJob)setCreatedJob(null);}}/></label>
           <label><span>Customer *</span><input name="customer" required placeholder="Customer name"/></label>
-          <JobPeopleFields names={peopleNames} onSave={["admin","super_admin"].includes(profile.role)?cloudDataService.savePerson:undefined} onRemove={["admin","super_admin"].includes(profile.role)?cloudDataService.removeSavedPerson:undefined}/><label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or production description"/></label>
+          <JobPeopleFields required names={peopleNames} onSave={["admin","super_admin"].includes(profile.role)?cloudDataService.savePerson:undefined} onRemove={["admin","super_admin"].includes(profile.role)?cloudDataService.removeSavedPerson:undefined}/><label className="wide"><span>Job description *</span><input name="description" required placeholder="Project name or production description"/></label>
           <label><span>Production due date *</span><CalendarDatePicker name="dueDate" min={localDateValue()} value={dueDate} onChange={setDueDate}/></label>
           <label><span>Priority</span><select name="priority" defaultValue="Standard"><option>Standard</option><option>Rush</option><option>Critical</option></select></label>
           {state.settings.showStartingLocationOnJobCreation&&<label className="wide intake-location"><span>Starting location <small>Optional</small></span><select name="initialDepartmentId" defaultValue=""><option value="">Not started</option>{enabledDepartments.map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select><small>Leave as Not started unless the job is already physically in production.</small></label>}

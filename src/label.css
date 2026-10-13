@@ -2952,7 +2952,8 @@ tr.deadline-overdue .status-pill.green {
   flex-direction: column;
 }
 
-.job-form .form-grid > label > span {
+.job-form .form-grid > label > span,
+.job-form .form-grid .person-field-label {
   min-height: 17px;
   margin-bottom: 8px;
   color: #53635e;
@@ -4814,6 +4815,7 @@ tr.deadline-overdue .status-pill.green {
 }
 
 .app-theme-dark .job-form .form-grid > label > span,
+.app-theme-dark .job-form .form-grid .person-field-label,
 .app-theme-dark .job-form fieldset legend,
 .app-theme-dark .calendar-trigger > span,
 .app-theme-dark .editor-grid label > span,
@@ -5279,7 +5281,7 @@ tr.deadline-overdue .status-pill.green {
 .intake-form-heading > span { align-self: flex-start; padding: 6px 9px; border-radius: 999px; background: #eef4f1; color: #61736b; font-size: 8px; font-weight: 800; white-space: nowrap; }
 
 .intake-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; padding: 25px 30px; }
-.intake-fields label > span,.intake-route legend { display: block; margin-bottom: 7px; font-size: 10px; font-weight: 850; }
+.intake-fields label > span,.intake-fields .person-field-label,.intake-route legend { display: block; margin-bottom: 7px; font-size: 10px; font-weight: 850; }
 .intake-fields .wide { grid-column: 1/-1; }
 .intake-fields input:not([type="checkbox"]),.intake-fields select,.intake-fields textarea { width: 100%; min-height: 43px; padding: 10px 12px; border: 1px solid #cbd8d2; border-radius: 9px; background: #fbfcfb; color: #172a22; outline: none; }
 .intake-fields textarea { resize: vertical; }

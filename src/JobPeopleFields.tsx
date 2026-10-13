@@ -2,10 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { PeopleNames } from "../lib/jobPeople";
 import { cleanPersonName,uniquePersonNames } from "../lib/jobPeople";
 import type { Job } from "../lib/dataService";
-export function JobPeopleFields({names,job,onChange,onRemove,onSave}:{names:PeopleNames;job?:Pick<Job,"customerRepresentative"|"projectManager">;onSave?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onRemove?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onChange?:(field:"customerRepresentative"|"projectManager",value:string)=>void}){
- return <><PersonField label="Account Representative" field="customerRepresentative" names={names.customerRepresentatives} initial={job?.customerRepresentative||""} onChange={onChange} onRemove={onRemove} onSave={onSave}/><PersonField label="Project Manager" field="projectManager" names={names.projectManagers} initial={job?.projectManager||""} onChange={onChange} onRemove={onRemove} onSave={onSave}/></>;
+export function JobPeopleFields({names,job,onChange,onRemove,onSave,required=false}:{required?:boolean;names:PeopleNames;job?:Pick<Job,"customerRepresentative"|"projectManager">;onSave?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onRemove?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onChange?:(field:"customerRepresentative"|"projectManager",value:string)=>void}){
+ return <><PersonField required={required} label="Account Representative" field="customerRepresentative" names={names.customerRepresentatives} initial={job?.customerRepresentative||""} onChange={onChange} onRemove={onRemove} onSave={onSave}/><PersonField required={required} label="Project Manager" field="projectManager" names={names.projectManagers} initial={job?.projectManager||""} onChange={onChange} onRemove={onRemove} onSave={onSave}/></>;
 }
-function PersonField({label,field,names,initial,onChange,onRemove,onSave}:{label:string;field:"customerRepresentative"|"projectManager";names:string[];initial:string;onSave?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onRemove?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onChange?:(field:"customerRepresentative"|"projectManager",value:string)=>void}){
+function PersonField({label,field,names,initial,onChange,onRemove,onSave,required}:{required:boolean;label:string;field:"customerRepresentative"|"projectManager";names:string[];initial:string;onSave?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onRemove?:(field:"customerRepresentative"|"projectManager",name:string)=>Promise<void>;onChange?:(field:"customerRepresentative"|"projectManager",value:string)=>void}){
  const [value,setValue]=useState(initial);const [adding,setAdding]=useState(false);const [draft,setDraft]=useState("");const root=useRef<HTMLDivElement>(null);
  const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const [added,setAdded]=useState<string[]>([]);
@@ -36,11 +36,11 @@ function PersonField({label,field,names,initial,onChange,onRemove,onSave}:{label
  };
  useEffect(()=>{const form=root.current?.closest("form");const reset=()=>{setValue(initial);setOpen(false);setError("");setAdding(false);setDraft("");};form?.addEventListener("reset",reset);return()=>form?.removeEventListener("reset",reset);},[initial]);
  return <div ref={root} className="person-field" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setOpen(false);}} onKeyDown={event=>{if(event.key==="Escape"&&open){event.preventDefault();event.stopPropagation();setOpen(false);trigger.current?.focus();}}}>
- <span id={id+"-label"} className="person-field-label">{label}</span>
+ <span id={id+"-label"} className="person-field-label">{label}{required?" *":""}</span>
  <input type="hidden" name={field} value={value}/>
- <button ref={trigger} type="button" className="person-select-trigger" aria-labelledby={id+"-label "+id+"-value"} aria-expanded={open} aria-controls={id+"-choices"} onClick={()=>setOpen(current=>!current)}><span id={id+"-value"}>{value||"Not assigned"}</span><span aria-hidden="true">⌄</span></button>
+ <button ref={trigger} type="button" className="person-select-trigger" aria-labelledby={id+"-label "+id+"-value"} aria-expanded={open} aria-controls={id+"-choices"} onClick={()=>setOpen(current=>!current)}><span id={id+"-value"}>{value||(required?"Select "+label:"Not assigned")}</span><span aria-hidden="true">⌄</span></button>
  {open&&<div id={id+"-choices"} className="person-choices" role="group" aria-labelledby={id+"-label"}>
- <button type="button" className="person-choice" onClick={()=>choose("")}>Not assigned</button>
+ {!required&&<button type="button" className="person-choice" onClick={()=>choose("")}>Not assigned</button>}
  {options.map(name=><div className="person-choice-row" key={name}><button type="button" className="person-choice" aria-pressed={value===name} onClick={()=>choose(name)}>{name}</button>{onRemove&&(names.includes(name)||added.includes(name))&&<button type="button" className="person-remove" disabled={busy} aria-label={`Remove ${label.toLowerCase()} ${name}`} title={`Remove saved name: ${name}`} onClick={()=>void remove(name)}>×</button>}</div>)}
  <button type="button" className="person-choice person-new" onClick={()=>{setAdding(true);setDraft("");setOpen(false);}}>+ Add New</button>
  </div>}
