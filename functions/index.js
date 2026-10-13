@@ -3,7 +3,13 @@ import {getAuth} from "firebase-admin/auth";
 import {getFirestore,FieldValue} from "firebase-admin/firestore";
 import {onCall,HttpsError} from "firebase-functions/v2/https";
 import {resetPolicy} from "./resetPolicy.js";
+import {onDocumentWritten} from "firebase-functions/v2/firestore";
+import {archiveCanceledJob} from "./canceledArchive.js";
 initializeApp();
+
+export const archiveCanceledJobs=onDocumentWritten({document:"jobs/{jobId}",region:"us-central1",maxInstances:3,retry:true,timeoutSeconds:540},async event=>{
+  await archiveCanceledJob(getFirestore(),event.params.jobId,()=>FieldValue.serverTimestamp());
+});
 
 export const resetProductionPasscode=onCall({region:"us-central1",maxInstances:3},async request=>{
   if(!request.auth)throw new HttpsError("unauthenticated","Sign in as a Super Admin.");
