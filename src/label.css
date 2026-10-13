@@ -221,6 +221,7 @@ td small,
 
 .jobs-workspace {
   display: grid;
+  align-content: start;
   gap: 16px;
 }
 
@@ -286,7 +287,7 @@ td small,
   transition: transform 0.18s ease;
 }
 
-.job-group.controls-open .toolbar-chevron {
+.jobs-tools-panel.controls-open .toolbar-chevron {
   transform: rotate(180deg);
 }
 
