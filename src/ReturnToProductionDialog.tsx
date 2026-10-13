@@ -15,7 +15,7 @@ export function ReturnToProductionDialog({job,departments,statuses,onReturn,onCl
     catch(error){setError(error instanceof Error?error.message:'Could not return this job. Please try again.');}
     finally{setBusy(false);}
   };
-  return <div className="job-editor-overlay" role="dialog" aria-modal="true" aria-label={`Return job ${job.jobNumber} to production`}>
+  return <div onClick={event=>{if(event.target===event.currentTarget&&!busy)onClose()}} className="job-editor-overlay" role="dialog" aria-modal="true" aria-label={`Return job ${job.jobNumber} to production`}>
     <form className="job-editor return-production-dialog" onSubmit={submit}>
       <h2>Return Job {job.jobNumber} to Production</h2>
       <p>This removes billing approval and returns the job to Active Jobs and the Live Dashboard. Notes and history are kept. Unselected parts remain complete.</p>
