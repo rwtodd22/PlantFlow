@@ -5712,3 +5712,7 @@ tr.deadline-overdue .status-pill.green {
 @media print {
   .viewer-groups, .jobs-workspace { min-height: 0; }
 }
+.metric-action { text-align: left; font: inherit; width: 100%; cursor: pointer; }
+.metric-action:hover { outline: 1px solid #7ca491; outline-offset: 1px; }
+.metric-action[aria-pressed="true"] { outline: 2px solid #32866c; outline-offset: 2px; }
+.metric-action:focus-visible { outline: 3px solid #32866c; outline-offset: 3px; }

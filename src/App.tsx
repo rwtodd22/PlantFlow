@@ -412,6 +412,7 @@ export default function Home() {
   const [splitJob, setSplitJob] = useState<Job | null>(null);
   const [partToDelete, setPartToDelete] = useState<{job:Job;part:JobPart} | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "location" | "customer">("none");
+  const [dashboardSort,setDashboardSort]=useState<"default"|"today"|"priority">("default");
   const [sortBy, setSortBy] = useState<"recent" | "due" | "priority" | "time" | "job" | "customer" | "account" | "manager">("recent");
   const [wfOnly,setWfOnly]=useState(false);
   const [departmentFilter, setDepartmentFilter] = useState<DepartmentSelection>(null);
@@ -786,7 +787,12 @@ export default function Home() {
     if (groups.length) return groups;
     return [{key:"empty",label:departmentFilter===null?"Active jobs":`${departmentSelectionLabel(departmentFilter,deptName)} jobs`,jobs:[]}];
   }, [groupBy, organizedJobs, departments, departmentFilter]);
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateValue();
+  const dashboardJobs=[...activeJobs].sort((a,b)=>{
+    if(dashboardSort==="today")return Number(b.dueDate===today)-Number(a.dueDate===today)||a.dueDate.localeCompare(b.dueDate);
+    if(dashboardSort==="priority"){const rank={Critical:0,Rush:1,Standard:2};return rank[a.priority]-rank[b.priority]||a.dueDate.localeCompare(b.dueDate);}
+    return 0;
+  });
 
   const approveForBilling = (jobIds: string[]) => {
     if (!jobIds.length) return;
@@ -1064,12 +1070,12 @@ export default function Home() {
       {page === "dashboard" && <section>
         <div className="metrics">
           <Metric label="Active jobs" value={activeJobs.length} sub="Across production" />
-          <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub="Needs attention" tone="amber" />
-          <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub="Priority work" tone="red" />
+          <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub={dashboardSort==="today"?"Due today first · click to reset":"Click to show due today first"} tone="amber" selected={dashboardSort==="today"} onClick={()=>setDashboardSort(current=>current==="today"?"default":"today")} />
+          <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub={dashboardSort==="priority"?"Priority first · click to reset":"Click to show critical / rush first"} tone="red" selected={dashboardSort==="priority"} onClick={()=>setDashboardSort(current=>current==="priority"?"default":"priority")} />
           <Metric label="Completed today" value={state.jobs.filter(j=>j.status==="Complete"&&j.updatedAt.slice(0,10)===today).length} sub="Production output" tone="green" />
         </div>
         <div className="dashboard-grid">
-          <div className="panel span-2"><div className="panel-head"><div><h2>Active production</h2><p>Live location and timing for every open job</p></div><button className="text-button" onClick={()=>setPage("jobs")}>View all →</button></div><JobTable jobs={activeJobs.slice(0,6)} deptName={deptName} settings={state.settings} highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onDeletePart={hasAdministrationAccess?(job,part)=>setPartToDelete({job,part}):undefined} onOpen={setSelectedJob} departments={departments} statuses={statuses} allowDateEditing={false} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/></div>
+          <div className="panel span-2"><div className="panel-head"><div><h2>Active production</h2><p>Live location and timing for every open job</p></div><button className="text-button" onClick={()=>setPage("jobs")}>View all →</button></div><JobTable jobs={dashboardJobs.slice(0,6)} deptName={deptName} settings={state.settings} highlightDeadlines={state.settings.deadlineHighlighting} onPrint={setPrintJob} onDeletePart={hasAdministrationAccess?(job,part)=>setPartToDelete({job,part}):undefined} onOpen={setSelectedJob} departments={departments} statuses={statuses} allowDateEditing={false} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/></div>
           <div className="panel"><div className="panel-head"><div><h2>Recent scans</h2><p>Latest shop-floor movements</p></div><span className="live-pill"><i/>LIVE</span></div><ScanList scans={state.scans.slice(0,5)} /></div>
         </div>
       </section>}
@@ -1284,7 +1290,10 @@ function PortalViewReport({groups,notes,departmentName,scope,search,sort,onClose
   </div>;
 }
 
-function Metric({label,value,sub,tone="blue"}:{label:string;value:number;sub:string;tone?:string}) { return <div className={`metric ${tone}`}><div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div></div>; }
+function Metric({label,value,sub,tone="blue",onClick,selected=false}:{label:string;value:number;sub:string;tone?:string;onClick?:()=>void;selected?:boolean}) {
+  const content=<div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div>;
+  return onClick?<button type="button" className={`metric metric-action ${tone}`} aria-pressed={selected} onClick={onClick}>{content}</button>:<div className={`metric ${tone}`}>{content}</div>;
+}
 
 function JobTable({jobs,deptName,settings,detailed=false,highlightDeadlines=false,showActions=true,collapsibleActions=false,onToggleActions,onPrint,onPrintPart,onDeletePart,onOpen,onSplit,departments,statuses,allowDateEditing=true,onInlineUpdate,onInlinePartUpdate}:{jobs:Job[];deptName:(id:string)=>string;settings:AppSettings;detailed?:boolean;highlightDeadlines?:boolean;showActions?:boolean;collapsibleActions?:boolean;onToggleActions?:()=>void;onPrint?:(job:Job)=>void;onPrintPart?:(job:Job,part:JobPart)=>void;onDeletePart?:(job:Job,part:JobPart)=>void;onOpen?:(job:Job)=>void;onSplit?:(job:Job)=>void;departments?:Department[];statuses?:StatusDefinition[];allowDateEditing?:boolean;onInlineUpdate?:(job:Job,field:"location"|"status"|"dueDate"|"priority",value:string)=>void;onInlinePartUpdate?:(job:Job,part:JobPart,field:"location"|"status",value:string)=>void}) {
   const actionsAvailable=Boolean(onPrint||onOpen);
