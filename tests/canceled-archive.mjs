@@ -50,3 +50,18 @@ records.set('jobs/locked',{...job,id:'locked'});records.set('archiveHistoryLocks
 await assert.rejects(archiveCanceledJob(db,'locked',()=>123),/already locked/);
 assert.ok(records.has('jobs/locked'));assert.equal(records.has('archivedJobs/locked'),false);
 console.log('PASS: canceled-only policy, split jobs, full record preservation, history isolation, interrupted capture recovery, and idempotent retries.');
+records.delete('archiveHistoryLocks/123');
+records.set('jobs/portal',{...job,id:'portal',status:'Complete',parts:[]});
+let checks=0;
+const portalAccess={uid:'designated-user',authorize:async()=>{checks++;},validate:()=>{}};
+await archiveCanceledJob(db,'portal',()=>123,portalAccess);
+assert.equal(checks,1);
+assert.equal(records.get('archivedJobs/portal').archivedBy,'designated-user');
+assert.equal(records.get('archivedJobs/portal').archiveOrigin,'wf-portal');
+assert.equal(records.get('archivedJobs/portal').historyStatus,'complete');
+await assert.rejects(archiveCanceledJob(db,'portal',()=>123,{...portalAccess,authorize:async()=>{throw new Error('Access revoked');}}),/Access revoked/);
+records.set('jobs/denied',{...job,id:'denied'});
+await assert.rejects(archiveCanceledJob(db,'denied',()=>123,{...portalAccess,validate:()=>{throw new Error('Not approved');}}),/Not approved/);
+assert.ok(records.has('jobs/denied'));
+assert.equal(records.has('archivedJobs/denied'),false);
+console.log('PASS: portal transaction authorization, archive attribution, revoked access and failed eligibility preserve records.');

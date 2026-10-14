@@ -4,28 +4,42 @@ export function isCanceledJob(job, statuses) {
 }
 
 // Transactional move, followed by resumable history capture. Retries never replace an archive.
-export async function archiveCanceledJob(db, jobId, timestamp) {
+export async function archiveCanceledJob(db, jobId, timestamp, portalAccess) {
   const source = db.doc(`jobs/${jobId}`);
   const archive = db.doc(`archivedJobs/${jobId}`);
   await db.runTransaction(async tx => {
+    if (portalAccess) await portalAccess.authorize(tx);
     const [jobDoc, archived, configDoc, deletion] = await Promise.all([
       tx.get(source), tx.get(archive), tx.get(db.doc("configuration/plantflow")), tx.get(db.doc(`jobDeletions/${jobId}`)),
     ]);
-    if (archived.exists || !jobDoc.exists || deletion.exists || !configDoc.exists) return;
+    if (archived.exists) {
+      if (portalAccess) portalAccess.validate(archived.data().job, archived.data().statuses);
+      return;
+    }
+    if (!jobDoc.exists || deletion.exists || !configDoc.exists) {
+      if (portalAccess) throw new Error("This job is no longer available for archiving.");
+      return;
+    }
     const job = jobDoc.data(), config = configDoc.data();
-    if (!isCanceledJob(job, config.statuses)) return;
+    if (portalAccess) portalAccess.validate(job, config.statuses);
+    else if (!isCanceledJob(job, config.statuses)) return;
     const historyCodes = [...new Set([job.jobNumber, ...(job.parts || []).map(part => part.code)])];
     if (historyCodes.some(code => typeof code !== "string" || !code || code.includes("/") || code === "." || code === "..")) throw new Error("Invalid archive barcode");
     const locks = historyCodes.map(code => db.doc(`archiveHistoryLocks/${code}`));
     const snapshots = await Promise.all(locks.map(lock => tx.get(lock)));
     if (snapshots.some(snapshot => snapshot.exists)) throw new Error("Archive barcode already locked");
-    tx.create(archive, {job, departments:config.departments, statuses:config.statuses, archivedAt:timestamp(), archivedBy:"system:canceled", historyStatus:"capturing", historyCodes});
+    tx.create(archive, {job, departments:config.departments, statuses:config.statuses, archivedAt:timestamp(), archivedBy:portalAccess?.uid || "system:canceled", ...(portalAccess ? {archiveOrigin:"wf-portal"} : {}), historyStatus:"capturing", historyCodes});
     locks.forEach(lock => tx.create(lock, {archiveId:jobId}));
     tx.delete(source);
     tx.delete(db.doc(`publicJobs/${jobId}`));
   });
+  await finishArchivedHistory(db, jobId, timestamp, portalAccess ? "wf-portal" : "system:canceled");
+}
+
+export async function finishArchivedHistory(db, jobId, timestamp, origin) {
+  const archive = db.doc(`archivedJobs/${jobId}`);
   const snapshot = await archive.get();
-  if (!snapshot.exists || snapshot.data().archivedBy !== "system:canceled" || snapshot.data().historyStatus !== "capturing") return;
+  if (!snapshot.exists || (origin === "wf-portal" ? snapshot.data().archiveOrigin !== origin : snapshot.data().archivedBy !== origin) || snapshot.data().historyStatus !== "capturing") return;
   const record = snapshot.data();
   const queries = [db.collection("scanEvents").where("jobId", "==", jobId)];
   for (let index=0; index<record.historyCodes.length; index+=30) queries.push(db.collection("scanEvents").where("jobNumber", "in", record.historyCodes.slice(index,index+30)));
