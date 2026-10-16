@@ -5723,7 +5723,13 @@ tr.deadline-overdue .status-pill.green {
 @media print {
   .viewer-groups, .jobs-workspace { min-height: 0; }
 }
-.metric-action { text-align: left; font: inherit; width: 100%; cursor: pointer; }
-.metric-action:hover { outline: 1px solid #7ca491; outline-offset: 1px; }
-.metric-action[aria-pressed="true"] { outline: 2px solid #32866c; outline-offset: 2px; }
+.metric-action { text-align: left; font: inherit; width: 100%; cursor: pointer; transition: transform 140ms ease, box-shadow 140ms ease; }
+@media (hover: hover) {
+  .metric-action:hover { transform: translateY(-2px); box-shadow: 0 4px 12px #163d2620; }
+}
+.metric-action:active { transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  .metric-action { transition: none; }
+  .metric-action:hover { transform: none; }
+}
 .metric-action:focus-visible { outline: 3px solid #32866c; outline-offset: 3px; }

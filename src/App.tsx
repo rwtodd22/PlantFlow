@@ -1071,9 +1071,9 @@ export default function Home() {
 
       {page === "dashboard" && <section>
         <div className="metrics">
-          <Metric label="Active jobs" value={activeJobs.length} sub={dashboardSort==="default"?"Most recently moved first":"Click to show most recently moved"} selected={dashboardSort==="default"} onClick={()=>setDashboardSort("default")} />
-          <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub={dashboardSort==="today"?"Due today first · click to reset":"Click to show due today first"} tone="amber" selected={dashboardSort==="today"} onClick={()=>setDashboardSort(current=>current==="today"?"default":"today")} />
-          <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub={dashboardSort==="priority"?"Priority first · click to reset":"Click to show critical / rush first"} tone="red" selected={dashboardSort==="priority"} onClick={()=>setDashboardSort(current=>current==="priority"?"default":"priority")} />
+          <Metric label="Active jobs" value={activeJobs.length} sub="Click to show most recently moved" onClick={()=>setDashboardSort("default")} />
+          <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub="Click to show due today first" tone="amber" onClick={()=>setDashboardSort("today")} />
+          <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub="Click to show critical / rush first" tone="red" onClick={()=>setDashboardSort("priority")} />
           <Metric label="Completed today" value={state.jobs.filter(j=>j.status==="Complete"&&j.updatedAt.slice(0,10)===today).length} sub="Production output" tone="green" />
         </div>
         <div className="dashboard-grid">
@@ -1295,9 +1295,9 @@ function PortalViewReport({groups,notes,departmentName,scope,search,sort,onClose
   </div>;
 }
 
-function Metric({label,value,sub,tone="blue",onClick,selected=false}:{label:string;value:number;sub:string;tone?:string;onClick?:()=>void;selected?:boolean}) {
+function Metric({label,value,sub,tone="blue",onClick}:{label:string;value:number;sub:string;tone?:string;onClick?:()=>void}) {
   const content=<div><p>{label}</p><strong>{value}</strong><small>{sub}</small></div>;
-  return onClick?<button type="button" className={`metric metric-action ${tone}`} aria-pressed={selected} onClick={onClick}>{content}</button>:<div className={`metric ${tone}`}>{content}</div>;
+  return onClick?<button type="button" className={`metric metric-action ${tone}`} onClick={onClick}>{content}</button>:<div className={`metric ${tone}`}>{content}</div>;
 }
 
 function JobTable({jobs,deptName,settings,detailed=false,highlightDeadlines=false,showActions=true,collapsibleActions=false,onToggleActions,onPrint,onPrintPart,onDeletePart,onOpen,onSplit,departments,statuses,allowDateEditing=true,onInlineUpdate,onInlinePartUpdate}:{jobs:Job[];deptName:(id:string)=>string;settings:AppSettings;detailed?:boolean;highlightDeadlines?:boolean;showActions?:boolean;collapsibleActions?:boolean;onToggleActions?:()=>void;onPrint?:(job:Job)=>void;onPrintPart?:(job:Job,part:JobPart)=>void;onDeletePart?:(job:Job,part:JobPart)=>void;onOpen?:(job:Job)=>void;onSplit?:(job:Job)=>void;departments?:Department[];statuses?:StatusDefinition[];allowDateEditing?:boolean;onInlineUpdate?:(job:Job,field:"location"|"status"|"dueDate"|"priority",value:string)=>void;onInlinePartUpdate?:(job:Job,part:JobPart,field:"location"|"status",value:string)=>void}) {
