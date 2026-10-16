@@ -413,7 +413,7 @@ export default function Home() {
   const [partToDelete, setPartToDelete] = useState<{job:Job;part:JobPart} | null>(null);
   const [groupBy, setGroupBy] = useState<"none" | "location" | "customer">("none");
   const [dashboardSort,setDashboardSort]=useState<"default"|"today"|"priority">("default");
-  const [sortBy, setSortBy] = useState<"recent" | "today" | "due" | "priority" | "time" | "job" | "customer" | "account" | "manager">("recent");
+  const [sortBy, setSortBy] = useState<"recent" | "new" | "today" | "due" | "priority" | "time" | "job" | "customer" | "account" | "manager">("recent");
   const [wfOnly,setWfOnly]=useState(false);
   const [departmentFilter, setDepartmentFilter] = useState<DepartmentSelection>(null);
   const [jobControlsOpen, setJobControlsOpen] = useState(false);
@@ -768,6 +768,7 @@ export default function Home() {
     return [...filteredJobs].sort((a,b) => {
       if(sortBy==="account"||sortBy==="manager")return compareJobPeople(a,b,sortBy==="account"?"customerRepresentative":"projectManager");
       if (sortBy === "due") return a.dueDate.localeCompare(b.dueDate);
+      if (sortBy === "new") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       if (sortBy === "today") return Number(b.dueDate === localDateValue()) - Number(a.dueDate === localDateValue()) || a.dueDate.localeCompare(b.dueDate);
       if (sortBy === "priority") return priorityRank[a.priority] - priorityRank[b.priority] || a.dueDate.localeCompare(b.dueDate);
       if (sortBy === "time") return new Date(parentUpdatedAt(a)).getTime() - new Date(parentUpdatedAt(b)).getTime();
@@ -792,7 +793,7 @@ export default function Home() {
   const dashboardJobs=[...activeJobs].sort((a,b)=>{
     if(dashboardSort==="today")return Number(b.dueDate===today)-Number(a.dueDate===today)||a.dueDate.localeCompare(b.dueDate);
     if(dashboardSort==="priority"){const rank={Critical:0,Rush:1,Standard:2};return rank[a.priority]-rank[b.priority]||a.dueDate.localeCompare(b.dueDate);}
-    return 0;
+    return new Date(parentUpdatedAt(b)).getTime() - new Date(parentUpdatedAt(a)).getTime();
   });
 
   const approveForBilling = (jobIds: string[]) => {
@@ -1070,7 +1071,7 @@ export default function Home() {
 
       {page === "dashboard" && <section>
         <div className="metrics">
-          <Metric label="Active jobs" value={activeJobs.length} sub="Across production" />
+          <Metric label="Active jobs" value={activeJobs.length} sub={dashboardSort==="default"?"Most recently moved first":"Click to show most recently moved"} selected={dashboardSort==="default"} onClick={()=>setDashboardSort("default")} />
           <Metric label="Due today" value={activeJobs.filter(j=>j.dueDate===today).length} sub={dashboardSort==="today"?"Due today first · click to reset":"Click to show due today first"} tone="amber" selected={dashboardSort==="today"} onClick={()=>setDashboardSort(current=>current==="today"?"default":"today")} />
           <Metric label="Rush / critical" value={activeJobs.filter(j=>j.priority!=="Standard").length} sub={dashboardSort==="priority"?"Priority first · click to reset":"Click to show critical / rush first"} tone="red" selected={dashboardSort==="priority"} onClick={()=>setDashboardSort(current=>current==="priority"?"default":"priority")} />
           <Metric label="Completed today" value={state.jobs.filter(j=>j.status==="Complete"&&j.updatedAt.slice(0,10)===today).length} sub="Production output" tone="green" />
@@ -1094,10 +1095,10 @@ export default function Home() {
       {page === "jobs" && <section className="jobs-workspace" ref={activeJobsRef}>
         <section className={`panel jobs-tools-panel ${jobControlsOpen?"controls-open":""}`} aria-label="Active job tools">
           <div className="group-heading"><div><h2>Active job tools</h2><p>Search, filter, and arrange the jobs below.</p></div><div className="jobs-toolbar-actions"><button type="button" className="fullscreen-toggle" onClick={toggleActiveJobsFullscreen}>{jobsFullscreen?<svg className="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3v5H3M12 17v-5h5M3 8l5-5M17 12l-5 5"/></svg>:<svg className="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3H3v4M13 3h4v4M17 13v4h-4M7 17H3v-4"/></svg>}<span>{jobsFullscreen?"Exit full screen":"Full screen"}</span></button><button type="button" className="controls-toggle" aria-expanded={jobControlsOpen} aria-controls="active-job-controls" onClick={()=>setJobControlsOpen(open=>!open)}><span>{jobControlsOpen?"Hide controls":"Search, organize & sort"}</span><svg className="toolbar-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></div></div>
-          {jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="control-field"><span>Departments</span><DepartmentMultiSelect departments={departments} value={departmentFilter} onChange={setDepartmentFilter}/></div><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="today">Due today first</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option><option value="account">Account Representative — A–Z</option><option value="manager">Project Manager — A–Z</option></select></label><label className="wf-filter-toggle"><input type="checkbox" checked={wfOnly} onChange={event=>setWfOnly(event.target.checked)}/><span>WF jobs only</span></label></div>}
+          {jobControlsOpen&&<div className="job-controls" id="active-job-controls"><label><span>Search</span><input className="search" placeholder="Job, customer, or description" value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="control-field"><span>Departments</span><DepartmentMultiSelect departments={departments} value={departmentFilter} onChange={setDepartmentFilter}/></div><label><span>Organize</span><select value={groupBy} onChange={e=>setGroupBy(e.target.value as typeof groupBy)}><option value="none">Overall view</option><option value="location">Group by department</option><option value="customer">Group by customer</option></select></label><label><span>Sort</span><select value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}><option value="recent">Most recently moved</option><option value="new">New jobs — newest first</option><option value="today">Due today first</option><option value="due">Due date — soonest</option><option value="priority">Priority — critical first</option><option value="time">Longest time here</option><option value="job">Job number</option><option value="customer">Customer name</option><option value="account">Account Representative — A–Z</option><option value="manager">Project Manager — A–Z</option></select></label><label className="wf-filter-toggle"><input type="checkbox" checked={wfOnly} onChange={event=>setWfOnly(event.target.checked)}/><span>WF jobs only</span></label></div>}
         </section>
         {jobGroups.map(group=><section className="panel job-group" key={group.key}>
-          <div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div><div className="job-quick-sorts" role="group" aria-label="Quick sort jobs">{([{value:"priority",label:"Rush & Critical"},{value:"today",label:"Due Today"},{value:"recent",label:"Recent"}] as const).map(option=><button type="button" key={option.value} aria-pressed={sortBy===option.value} onClick={()=>setSortBy(option.value)}>{option.label}</button>)}</div></div>
+          <div className="group-heading"><div><h2>{group.label}</h2><p>{group.jobs.length} {group.jobs.length===1?"job":"jobs"}</p></div><div className="job-quick-sorts" role="group" aria-label="Quick sort jobs">{([{value:"priority",label:"Rush & Critical"},{value:"today",label:"Due Today"},{value:"recent",label:"Recent"},{value:"new",label:"New Jobs"}] as const).map(option=><button type="button" key={option.value} aria-pressed={sortBy===option.value} onClick={()=>setSortBy(option.value)}>{option.label}</button>)}</div></div>
           <JobTable jobs={group.jobs} deptName={deptName} settings={state.settings} detailed highlightDeadlines={state.settings.deadlineHighlighting} showActions={jobActionsOpen} collapsibleActions onToggleActions={()=>setJobActionsOpen(open=>!open)} onPrint={setPrintJob} onPrintPart={(job,part)=>setPrintPart({job,part})} onDeletePart={hasAdministrationAccess?(job,part)=>setPartToDelete({job,part}):undefined} onOpen={setSelectedJob} onSplit={setSplitJob} departments={departments} statuses={statuses} allowDateEditing={canChangeSchedule} onInlineUpdate={updateJobInline} onInlinePartUpdate={updatePartInline}/>
         </section>)}
       </section>}
