@@ -435,8 +435,18 @@ td small,
   }
 }
 
+.job-quick-sorts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.job-quick-sorts button { min-height: 30px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.job-quick-sorts button:hover { border-color: var(--green); color: var(--green); }
+.job-quick-sorts button[aria-pressed="true"] { background: #e3f1eb; border-color: #87b5a4; color: #155c46; }
+.job-quick-sorts button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.app-theme-dark .job-quick-sorts button { background: #242d32; color: #d3dfdb; border-color: #46535a; }
+.app-theme-dark .job-quick-sorts button[aria-pressed="true"] { background: #244b3f; color: #bcebd8; border-color: #73b79f; }
+@media print { .job-quick-sorts { display: none; } }
 .group-heading {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
