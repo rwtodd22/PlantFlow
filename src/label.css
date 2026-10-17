@@ -5692,6 +5692,13 @@ tr.deadline-overdue .status-pill.green {
 .viewer-theme-graphite .viewer-manager-choices button { color: #a9d5c4; border-color: #50675d; }
 .viewer-theme-graphite .viewer-manager-choices button[aria-pressed="true"] { color: #fff; background: #286e58; border-color: #82b29f; }
 .viewer-manager-choices { align-items: flex-start; }
+.rep-filter-menu { border: 1px solid #cbdad3; border-radius: 8px; min-width: 240px; max-width: 100%; font-size: 13px; }
+.rep-filter-menu summary { cursor: pointer; padding: 8px 12px; }
+.rep-filter-menu summary:focus-visible { outline: 2px solid #32866c; outline-offset: 2px; }
+.rep-filter-menu > div { max-height: 260px; overflow-y: auto; padding: 8px 12px; border-top: 1px solid #cbdad3; }
+.rep-filter-menu label { display: flex; align-items: center; gap: 9px; padding: 7px 0; cursor: pointer; }
+.rep-filter-menu input { width: 16px; height: 16px; margin: 0; accent-color: #155f48; }
+.viewer-theme-graphite .rep-filter-menu, .viewer-theme-graphite .rep-filter-menu > div { border-color: #50675d; color: #dce9e3; }
 .viewer-manager-dropdown { border: 1px solid #cbdad3; border-radius: 8px; min-width: 240px; max-width: 100%; font-size: 13px; }
 .viewer-manager-dropdown summary { cursor: pointer; padding: 8px 12px; }
 .viewer-manager-dropdown summary span { margin-left: 10px; font-size: 11px; opacity: .8; }
