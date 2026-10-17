@@ -1431,7 +1431,9 @@ tr.deadline-overdue .status-pill.green {
 .viewer-result-count { display: inline-flex; align-items: baseline; gap: 5px; }
 .viewer-groups { display: grid; gap: 13px; }
 .viewer-group { padding: 0; overflow: hidden; }
-.viewer-group-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 13px; border-bottom: 1px solid #e2e9e6; background: linear-gradient(90deg,#fbfdfc,#f5f9f7); }
+.viewer-group-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 16px 18px 13px; border-bottom: 1px solid #e2e9e6; background: linear-gradient(90deg,#fbfdfc,#f5f9f7); }
+.viewer-theme-graphite .job-quick-sorts button { background: #242d32; color: #d3dfdb; border-color: #46535a; }
+.viewer-theme-graphite .job-quick-sorts button[aria-pressed="true"] { background: #244b3f; color: #bcebd8; border-color: #73b79f; }
 .viewer-group-head h2 { font-size: 15px; }
 .viewer-group-head p { margin-top: 3px; color: #7a8782; font-size: 10px; }
 .viewer-table-wrap { overflow-x: auto; }
