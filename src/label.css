@@ -1,3 +1,13 @@
+.reprint-dismiss-area { display: flex; justify-content: center; margin-top: 22px; padding-top: 12px; border-top: 1px solid #dce5e0; }
+.reprint-dismiss-area button { background: transparent; border: 0; color: #65766f; font-size: 12px; padding: 6px 10px; min-height: 30px; text-decoration: underline; text-underline-offset: 3px; }
+.reprint-dismiss-area button:hover { color: #253f34; }
+.reprint-dismiss-area button:focus-visible { outline: 2px solid #32866c; outline-offset: 3px; }
+.app-theme-dark .reprint-dismiss-area button, .intake-theme-dark .reprint-dismiss-area button { color: #b9cbc3; }
+.history-search { display: grid; gap: 8px; margin-bottom: 20px; }
+.history-search label { font-size: 13px; font-weight: 700; }
+.history-search input { width: 100%; max-width: 620px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
+.history-search small { color: var(--muted); }
+@media print { .reprint-dismiss-area { display: none; } }
 .barcode-placeholder {
   height: 78px;
   border: 1px dashed #cbd5d0;
