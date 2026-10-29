@@ -14,7 +14,8 @@ const date = (days:number) => new Date(now+days*86400000).toISOString().slice(0,
 export const seedState: AppState = {
   settings:{deadlineHighlighting:true,timeDisplayMode:"days",billingAutoDeleteApproved90Days:false,showOvertimeOnJobCreation:false,showExpectedRouteOnJobCreation:false,showStartingLocationOnJobCreation:false},
   departments:[
-    {id:"prepress",name:"Prepress",prefix:"PREPRESS",enabled:true,order:1},{id:"print",name:"Printing",prefix:"PRINT",enabled:true,order:2},{id:"lam",name:"Lamination",prefix:"LAM",enabled:true,order:3},{id:"route",name:"Routing",prefix:"ROUTE",enabled:true,order:4},{id:"paint",name:"Painting",prefix:"PAINT",enabled:true,order:5},{id:"finish",name:"Finishing",prefix:"FINISH",enabled:true,order:6},{id:"assembly",name:"Assembly",prefix:"ASSEMBLY",enabled:true,order:7},{id:"pack",name:"Packaging",prefix:"PACK",enabled:true,order:8},{id:"ship",name:"Shipping",prefix:"SHIP",enabled:true,order:9}
+    {id:"prepress",name:"Prepress",prefix:"PREPRESS",enabled:true,order:1},{id:"print",name:"Printing",prefix:"PRINT",enabled:true,order:2},{id:"lam",name:"Lamination",prefix:"LAM",enabled:true,order:3},{id:"route",name:"Routing",prefix:"ROUTE",enabled:true,order:4},{id:"paint",name:"Painting",prefix:"PAINT",enabled:true,order:5},{id:"finish",name:"Finishing",prefix:"FINISH",enabled:true,order:6},{id:"assembly",name:"Assembly",prefix:"ASSEMBLY",enabled:true,order:7},{id:"pack",name:"Packaging",prefix:"PACK",enabled:true,order:8},{id:"ship",name:"Shipping",prefix:"SHIP",enabled:true,order:9},
+    {id:"oss",name:"OSS",prefix:"OSS",enabled:true,order:11}
   ],
   statuses:[
     {id:"ready",name:"Ready for Production",code:"READY",enabled:true,order:1,color:"#64748b",closesJob:false},
@@ -24,7 +25,9 @@ export const seedState: AppState = {
     {id:"quality",name:"Quality Check",code:"QUALITY_CHECK",enabled:true,order:5,color:"#7657a8",closesJob:false},
     {id:"rework",name:"Rework",code:"REWORK",enabled:true,order:6,color:"#b63833",closesJob:false},
     {id:"complete",name:"Complete",code:"COMPLETE",enabled:true,order:7,color:"#0f7957",closesJob:true},
-    {id:"canceled",name:"Canceled",code:"CANCELED",enabled:true,order:8,color:"#6b7280",closesJob:true}
+    {id:"canceled",name:"Canceled",code:"CANCELED",enabled:true,order:8,color:"#6b7280",closesJob:true},
+    {id:"ready-install",name:"Ready for Install",code:"READY_INSTALL",enabled:true,order:10,color:"#277e87",closesJob:false},
+    {id:"ready-shipping",name:"Ready for Shipping",code:"READY_SHIPPING",enabled:true,order:11,color:"#416fa4",closesJob:false}
   ],
   jobs:[
     {id:"j1",jobNumber:"590036",customer:"VCU Generations",description:"GEN 1006 — Additional Sign",dueDate:date(1),priority:"Rush",status:"In Production",currentDepartmentId:"print",route:["prepress","print","route","finish","pack","ship"],notes:"",createdAt:iso(700),updatedAt:iso(12)},
